@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generador de Licencias - Habitex Calcula Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 flex items-center justify-center min-h-screen font-sans">
+    <div class="w-full max-w-2xl bg-white p-8 rounded-lg shadow-lg relative">
+        <button id="downloadDbBtn" class="absolute top-4 right-4 flex items-center gap-1 px-2 py-1 bg-slate-200 text-slate-600 rounded-md hover:bg-slate-300 transition-colors text-xs" title="Descargar registro de licencias">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            <span>Registros</span>
+        </button>
+
+        <div class="flex items-center space-x-3 mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-8 w-8 text-cyan-600">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 12 l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h7.5" />
+            </svg>
+            <h1 class="text-2xl font-bold text-slate-700 tracking-tight">
+                Generador de Licencias <span class="font-light text-cyan-600">Habitex Calcula</span>
+            </h1>
+        </div>
+        
+        <div class="space-y-4">
+            <div>
+                <label for="deviceId" class="block text-sm font-medium text-slate-600 mb-1">1. Pegue el Device ID del usuario:</label>
+                <input id="deviceId" type="text" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-cyan-500" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+            </div>
+
+            <div>
+                <label for="personName" class="block text-sm font-medium text-slate-600 mb-1">2. Nombre y Apellidos del Cliente:</label>
+                <input id="personName" type="text" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-cyan-500" placeholder="Nombre completo del titular de la licencia">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-600 mb-1">3. Tipo de Licencia:</label>
+                <div class="flex space-x-4">
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="radio" name="licenseType" value="trial" class="h-4 w-4 text-cyan-600 focus:ring-cyan-500" checked>
+                        <span class="text-sm">Prueba</span>
+                    </label>
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="radio" name="licenseType" value="pro-annual" class="h-4 w-4 text-cyan-600 focus:ring-cyan-500">
+                        <span class="text-sm">Pro (Anual)</span>
+                    </label>
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="radio" name="licenseType" value="pro-lifetime" class="h-4 w-4 text-cyan-600 focus:ring-cyan-500">
+                        <span class="text-sm">Pro (Permanente)</span>
+                    </label>
+                </div>
+            </div>
+
+            <div id="durationOptions" class="mt-2 ml-6 space-y-2">
+                <div id="trialOptions">
+                    <label for="trialDays" class="block text-xs font-medium text-slate-500 mb-1">Días de duración:</label>
+                    <input id="trialDays" type="number" value="7" class="w-24 px-3 py-1 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-cyan-500">
+                </div>
+                <div id="annualOptions" class="hidden">
+                    <label for="proYears" class="block text-xs font-medium text-slate-500 mb-1">Años de duración:</label>
+                    <input id="proYears" type="number" value="1" class="w-24 px-3 py-1 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-cyan-500">
+                </div>
+            </div>
+            
+            <button id="generateBtn" class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-cyan-600 text-white rounded-md hover:bg-cyan-700 transition-colors shadow-md text-lg font-semibold">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H5v-2H3v-2H1v-4a6 6 0 017.743-5.743z" />
+                </svg>
+                4. Generar Clave
+            </button>
+            
+            <div>
+                <label for="licenseKey" class="block text-sm font-medium text-slate-600 mb-1">5. Copie y envíe esta clave al usuario:</label>
+                <div class="relative">
+                    <input id="licenseKey" type="text" readonly class="w-full pl-3 pr-10 py-2 bg-slate-50 border border-slate-300 rounded-md select-all" placeholder="La clave generada aparecerá aquí...">
+                    <button id="copyBtn" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-500 hover:text-cyan-600" title="Copiar al portapapeles">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="feedback" class="mt-4 text-center text-sm"></div>
+    </div>
+
+    <script>
+        const _0x5a1t = 'SEVjcmV0U2FsdEZvckxpY2Vuc2VLZXlHZW5lcmF0aW9uSGFiaXRleENhbGN1bGFQcm8zLjA=';
+
+        const getSecret = () => {
+            try {
+                return atob(_0x5a1t);
+            } catch (e) {
+                return 'SecretSaltForLicenseKeyGenerationHabitexCalculaPro3.0';
+            }
+        };
+
+        async function sha256(message) {
+            const msgBuffer = new TextEncoder().encode(message);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            return hashHex;
+        }
+
+        const deviceIdInput = document.getElementById('deviceId');
+        const personNameInput = document.getElementById('personName');
+        const licenseTypeRadios = document.querySelectorAll('input[name="licenseType"]');
+        const trialOptionsDiv = document.getElementById('trialOptions');
+        const annualOptionsDiv = document.getElementById('annualOptions');
+        const trialDaysInput = document.getElementById('trialDays');
+        const proYearsInput = document.getElementById('proYears');
+        const generateBtn = document.getElementById('generateBtn');
+        const licenseKeyInput = document.getElementById('licenseKey');
+        const copyBtn = document.getElementById('copyBtn');
+        const feedbackEl = document.getElementById('feedback');
+        const downloadDbBtn = document.getElementById('downloadDbBtn');
+        const DB_KEY = 'habitex_license_db';
+
+
+        function updateDurationOptions() {
+            const selectedType = document.querySelector('input[name="licenseType"]:checked').value;
+            trialOptionsDiv.classList.toggle('hidden', selectedType !== 'trial');
+            annualOptionsDiv.classList.toggle('hidden', selectedType !== 'pro-annual');
+        }
+        licenseTypeRadios.forEach(radio => radio.addEventListener('change', updateDurationOptions));
+        updateDurationOptions();
+
+        async function generateLicenseKey(deviceId, personName) {
+            if (!deviceId || !personName) {
+                return null;
+            }
+            
+            const licenseType = document.querySelector('input[name="licenseType"]:checked').value;
+            const payload = {
+                tier: 'pro',
+                app: 'habitex',
+                name: personName,
+                generatedAt: Date.now()
+            };
+
+            if (licenseType === 'trial') {
+                const trialDays = parseInt(trialDaysInput.value, 10) || 7;
+                const expirationDate = new Date();
+                expirationDate.setDate(expirationDate.getDate() + trialDays);
+                payload.type = 'trial';
+                payload.expiresAt = expirationDate.getTime();
+            } else if (licenseType === 'pro-annual') {
+                const proYears = parseInt(proYearsInput.value, 10) || 1;
+                const expirationDate = new Date();
+                expirationDate.setFullYear(expirationDate.getFullYear() + proYears);
+                payload.type = 'pro';
+                payload.expiresAt = expirationDate.getTime();
+            } else { // pro-lifetime
+                payload.type = 'pro';
+            }
+            
+            const encodedPayload = btoa(JSON.stringify(payload));
+            const secret = getSecret();
+            const dataToSign = encodedPayload + deviceId + secret;
+            const signature = await sha256(dataToSign);
+            
+            return { licenseKey: `${encodedPayload}.${signature}`, payload };
+        }
+
+        function saveLicenseRecord(record) {
+            try {
+                const db = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
+                db.push(record);
+                localStorage.setItem(DB_KEY, JSON.stringify(db));
+            } catch (e) {
+                console.error("Failed to save license record:", e);
+                feedbackEl.textContent = 'Error al guardar el registro de la licencia.';
+                feedbackEl.className = 'mt-4 text-center text-sm text-red-600';
+            }
+        }
+
+        generateBtn.addEventListener('click', async () => {
+            const deviceId = deviceIdInput.value.trim();
+            const personName = personNameInput.value.trim();
+            if (!deviceId || !personName) {
+                feedbackEl.textContent = 'Por favor, introduzca el Device ID y el Nombre del cliente.';
+                feedbackEl.className = 'mt-4 text-center text-sm text-red-600';
+                licenseKeyInput.value = '';
+                return;
+            }
+
+            feedbackEl.textContent = 'Generando...';
+            feedbackEl.className = 'mt-4 text-center text-sm text-slate-500';
+            
+            const result = await generateLicenseKey(deviceId, personName);
+            
+            if (result) {
+                licenseKeyInput.value = result.licenseKey;
+                feedbackEl.textContent = '¡Clave generada con éxito!';
+                feedbackEl.className = 'mt-4 text-center text-sm text-green-600';
+
+                const licenseType = document.querySelector('input[name="licenseType"]:checked').value;
+                const record = {
+                    name: personName,
+                    deviceId: deviceId,
+                    licenseKey: result.licenseKey,
+                    type: licenseType,
+                    issuedAt: new Date(result.payload.generatedAt).toISOString(),
+                    expiresAt: result.payload.expiresAt ? new Date(result.payload.expiresAt).toISOString() : 'Lifetime'
+                };
+                saveLicenseRecord(record);
+
+            } else {
+                licenseKeyInput.value = '';
+                feedbackEl.textContent = 'No se pudo generar la clave. Verifique los datos.';
+                feedbackEl.className = 'mt-4 text-center text-sm text-red-600';
+            }
+        });
+
+        function downloadRecordsCSV() {
+            try {
+                const db = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
+                if (db.length === 0) {
+                    alert('No hay registros de licencias para descargar.');
+                    return;
+                }
+
+                const header = "Nombre,Device ID,Clave de Licencia,Tipo,Fecha de Emisión,Fecha de Expiración\n";
+                const csvRows = db.map(record => {
+                    const name = `"${(record.name || '').replace(/"/g, '""')}"`;
+                    return [name, record.deviceId, record.licenseKey, record.type, record.issuedAt, record.expiresAt].join(',');
+                });
+                
+                const csvString = header + csvRows.join('\n');
+                const blob = new Blob([`\uFEFF${csvString}`], { type: 'text/csv;charset=utf-8;' }); // Add BOM for Excel
+                const link = document.createElement("a");
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", `habitex_license_records_${new Date().toISOString().slice(0,10)}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+            } catch(e) {
+                console.error("Failed to download records:", e);
+                alert("Ocurrió un error al descargar los registros.");
+            }
+        }
+        downloadDbBtn.addEventListener('click', downloadRecordsCSV);
+
+
+        function fallbackCopy(textToCopy) {
+            licenseKeyInput.select();
+            licenseKeyInput.setSelectionRange(0, 99999);
+            try {
+                document.execCommand('copy');
+                feedbackEl.textContent = '¡Clave copiada al portapapeles!';
+                feedbackEl.className = 'mt-4 text-center text-sm text-green-600';
+            } catch (err) {
+                console.error('Fallback copy failed', err);
+                feedbackEl.textContent = 'Error al copiar. Por favor, copie manualmente.';
+                feedbackEl.className = 'mt-4 text-center text-sm text-red-600';
+            }
+            if (window.getSelection) {
+                window.getSelection().removeAllRanges();
+            } else if (document.selection) {
+                document.selection.empty();
+            }
+        }
+
+        copyBtn.addEventListener('click', () => {
+            const keyToCopy = licenseKeyInput.value;
+            if (!keyToCopy) return;
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(keyToCopy).then(() => {
+                    feedbackEl.textContent = '¡Clave copiada al portapapeles!';
+                    feedbackEl.className = 'mt-4 text-center text-sm text-green-600';
+                }).catch(err => {
+                    fallbackCopy(keyToCopy);
+                });
+            } else {
+                fallbackCopy(keyToCopy);
+            }
+        });
+
+    </script>
+</body>
+</html>

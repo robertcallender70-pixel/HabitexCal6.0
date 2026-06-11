@@ -1,0 +1,271 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Migrador de Datos - Habitex Calcula</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        cyan: {
+                            600: '#0891b2',
+                            700: '#0e7490',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-100 min-h-screen flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full p-8">
+        <div class="flex items-center gap-3 mb-6 border-b pb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-8 h-8 text-cyan-600">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0011.667 0l3.181-3.183m-4.991-2.691V5.25a2.25 2.25 0 00-2.25-2.25h-4.5a2.25 2.25 0 00-2.25 2.25v4.5A2.25 2.25 0 006.75 12h4.5a2.25 2.25 0 002.25-2.25v-2.25" />
+            </svg>
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800">Migrador de Datos</h1>
+                <p class="text-sm text-slate-500">Convierte respaldos antiguos (CUP) al formato Pro (USD Base)</p>
+            </div>
+        </div>
+
+        <div class="space-y-6">
+            <!-- Step 1 -->
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-2">1. Tasa de Cambio Original</label>
+                <div class="bg-yellow-50 p-3 rounded-md border border-yellow-200 mb-2 text-sm text-yellow-800">
+                    Introduce el valor del dólar que usabas cuando creaste estos proyectos. El sistema dividirá todos los precios antiguos por este número para convertirlos a la nueva base USD.
+                </div>
+                <input type="number" id="exchangeRate" value="380" class="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-cyan-600 focus:outline-none" placeholder="Ej: 350">
+            </div>
+
+            <!-- Step 2 -->
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-2">2. Seleccionar Archivo de Respaldo (.json)</label>
+                <input type="file" id="fileInput" accept=".json" class="block w-full text-sm text-slate-500
+                  file:mr-4 file:py-2 file:px-4
+                  file:rounded-full file:border-0
+                  file:text-sm file:font-semibold
+                  file:bg-cyan-50 file:text-cyan-700
+                  hover:file:bg-cyan-100
+                "/>
+            </div>
+
+            <!-- Action -->
+            <button id="convertBtn" class="w-full bg-cyan-600 text-white font-bold py-3 px-4 rounded-md hover:bg-cyan-700 transition disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                Convertir y Descargar
+            </button>
+
+            <!-- Logs -->
+            <div id="logs" class="hidden mt-4 p-4 bg-slate-900 text-green-400 font-mono text-xs rounded-md h-48 overflow-y-auto"></div>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const convertBtn = document.getElementById('convertBtn');
+        const rateInput = document.getElementById('exchangeRate');
+        const logsDiv = document.getElementById('logs');
+
+        const log = (msg) => {
+            logsDiv.classList.remove('hidden');
+            const p = document.createElement('div');
+            p.textContent = `> ${msg}`;
+            logsDiv.appendChild(p);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        };
+
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                convertBtn.disabled = false;
+            }
+        });
+
+        convertBtn.addEventListener('click', () => {
+            const file = fileInput.files[0];
+            const rate = parseFloat(rateInput.value);
+
+            if (!file || isNaN(rate) || rate <= 0) {
+                alert('Por favor selecciona un archivo y una tasa de cambio válida.');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const rawData = e.target.result;
+                    const data = JSON.parse(rawData);
+                    processData(data, rate);
+                } catch (err) {
+                    console.error(err);
+                    alert('Error al leer el archivo JSON. Verifica que sea un respaldo válido.');
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        function toUSD(value, rate) {
+            if (!value || isNaN(value)) return 0;
+            return parseFloat((value / rate).toFixed(4)); // Keep 4 decimals for precision
+        }
+
+        function processData(data, rate) {
+            logsDiv.innerHTML = '';
+            log(`Iniciando migración con tasa 1 USD = ${rate} CUP...`);
+
+            // 1. Convert Projects
+            if (data.projects) {
+                data.projects = data.projects.map(p => {
+                    // Ensure project has the rate set so it displays correctly in the new app
+                    p.exchangeRate = rate;
+                    return p;
+                });
+                log(`Proyectos actualizados: ${data.projects.length}`);
+            }
+
+            // 2. Convert Material Prices (Library)
+            if (data.materialPrices) {
+                data.materialPrices = data.materialPrices.map(mp => {
+                    mp.price = toUSD(mp.price, rate);
+                    return mp;
+                });
+                log(`Precios de materiales convertidos: ${data.materialPrices.length}`);
+            }
+
+            // 3. Convert Activities Materials
+            if (data.activities) {
+                let matCount = 0;
+                data.activities = data.activities.map(act => {
+                    if (act.results) {
+                        act.results = act.results.map(res => {
+                            if (res.unitPrice > 0) {
+                                res.unitPrice = toUSD(res.unitPrice, rate);
+                                matCount++;
+                            }
+                            return res;
+                        });
+                    }
+                    return act;
+                });
+                log(`Precios en materiales de actividades convertidos: ${matCount}`);
+            }
+
+            // 4. Convert Labor Items (Mano de Obra Project)
+            if (data.laborItems) {
+                data.laborItems = data.laborItems.map(li => {
+                    li.unitPrice = toUSD(li.unitPrice, rate);
+                    return li;
+                });
+                log(`Items de mano de obra convertidos: ${data.laborItems.length}`);
+            }
+
+            // 5. Convert Budget Items (Otros Gastos)
+            if (data.budgetItems) {
+                data.budgetItems = data.budgetItems.map(bi => {
+                    bi.cost = toUSD(bi.cost, rate);
+                    return bi;
+                });
+                log(`Items de presupuesto convertidos: ${data.budgetItems.length}`);
+            }
+
+            // 6. Convert Transactions
+            if (data.transactions) {
+                data.transactions = data.transactions.map(t => {
+                    t.amount = toUSD(t.amount, rate);
+                    return t;
+                });
+                log(`Transacciones convertidas: ${data.transactions.length}`);
+            }
+
+            // 7. FIX DATA LIBRARY (The crucial part for "cosas raras")
+            if (data.dataLibrary) {
+                // Determine if dataLibrary is Array (old export format) or Object (new export format could vary, but usually array in IDB export)
+                const libraryArray = Array.isArray(data.dataLibrary) ? data.dataLibrary : [];
+                
+                // Find labor_activities
+                const laborIndex = libraryArray.findIndex(item => item.id === 'labor_activities');
+                
+                if (laborIndex !== -1) {
+                    const laborActivities = libraryArray[laborIndex].data;
+                    if (Array.isArray(laborActivities)) {
+                        const newLaborActivities = laborActivities.map(act => {
+                            // If it has priceMN, convert to priceUSD and delete priceMN
+                            if (act.priceMN !== undefined) {
+                                act.priceUSD = toUSD(act.priceMN, rate);
+                                delete act.priceMN;
+                            } else if (act.priceUSD !== undefined) {
+                                // Already USD? Check if value is suspiciously high (e.g. > 100 for simple labor)
+                                // This is a heuristic safety check
+                                if (act.priceUSD > 500) { 
+                                    act.priceUSD = toUSD(act.priceUSD, rate);
+                                }
+                            }
+                            return act;
+                        });
+                        libraryArray[laborIndex].data = newLaborActivities;
+                        log(`Librería de Mano de Obra migrada (priceMN -> priceUSD): ${newLaborActivities.length} items`);
+                    }
+                } else {
+                    // It might be nested differently or the export structure puts laborItems at root for the library in older versions?
+                    // Based on provided file, 'labor_activities' key inside dataLibrary array is correct.
+                    // However, we should also check 'labor_items' store if it was exported raw.
+                    // The main issue described is usually 'labor_activities' inside 'dataLibrary'.
+                }
+                
+                // Convert other library costs if necessary (e.g. materials in library if stored differently)
+                // Assuming standard materialPrices store handles the main prices.
+            }
+
+            // 8. Certifications (Snapshots)
+            // This is tricky because snapshots are historical.
+            // We should convert the snapshot values too so reports generated from them are consistent.
+            if (data.certifications) {
+                data.certifications = data.certifications.map(cert => {
+                    if (cert.snapshot) {
+                        const s = cert.snapshot;
+                        s.completedLaborCost = toUSD(s.completedLaborCost, rate);
+                        s.materialExpenseCost = toUSD(s.materialExpenseCost, rate);
+                        s.transportExpenseCost = toUSD(s.transportExpenseCost, rate);
+                        s.manualExpenseCost = toUSD(s.manualExpenseCost, rate);
+                        s.logisticsCost = toUSD(s.logisticsCost, rate);
+                        s.technicalAssistanceCost = toUSD(s.technicalAssistanceCost, rate);
+                        s.profitCost = toUSD(s.profitCost, rate);
+                        s.serviceTaxCost = toUSD(s.serviceTaxCost || 0, rate);
+                        s.grandTotal = toUSD(s.grandTotal, rate);
+                        s.totalAnticipoAtCertification = toUSD(s.totalAnticipoAtCertification, rate);
+                        s.totalBudgetAtCertification = toUSD(s.totalBudgetAtCertification, rate);
+                        s.incrementalValue = toUSD(s.incrementalValue, rate);
+                        s.anticipoDeduction = toUSD(s.anticipoDeduction, rate);
+                        s.finalBillableAmount = toUSD(s.finalBillableAmount, rate);
+                    }
+                    return cert;
+                });
+                log(`Certificaciones históricas ajustadas: ${data.certifications.length}`);
+            }
+
+            // 9. Download
+            download(data);
+        }
+
+        function download(data) {
+            const jsonString = JSON.stringify(data, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `habitex_migrated_${new Date().toISOString().slice(0,10)}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            log('¡Listo! Archivo descargado. Ahora impórtalo en la aplicación.');
+        }
+    </script>
+</body>
+</html>
+    
