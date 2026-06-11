@@ -5,11 +5,12 @@
  * Funcionalidad offline completa y compatibilidad con PWABuilder
  */
 
-const CACHE_NAME = 'habitex-calcula-v6.1';
+const CACHE_NAME = 'habitex-calcula-v6.2';
 
 const URLS_TO_PRECACHE = [
     './',
     'index.html',
+    'manifest.webmanifest',
     'manifest.json',
     'assets/icons/icon-192x192.png',
     'assets/icons/icon-512x512.png',
@@ -94,7 +95,7 @@ self.addEventListener('fetch', event => {
         return res && (res.status === 200 || res.status === 0);
     };
 
-    if (isNavigation || url.pathname.endsWith('manifest.json')) {
+    if (isNavigation || url.pathname.endsWith('manifest.json') || url.pathname.endsWith('manifest.webmanifest')) {
         // --- Network-First con fallback a caché (muy útil para index.html o manifest.json cambiantes) ---
         event.respondWith(
             fetch(event.request)
