@@ -123,11 +123,8 @@
         // --- Manual Service Worker Registration ---
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                // Construimos la URL del SW de forma absoluta respecto al documento actual
-                // para evitar que el navegador lo resuelva contra el dominio padre (ai.studio)
-                const swPath = new URL('sw.js', window.location.href).href;
-                
-                navigator.serviceWorker.register(swPath)
+                // Registramos el sw.js desde el root absoluto con scope '/' para garantizar funcionamiento offline en cualquier sub-ruta
+                navigator.serviceWorker.register('/sw.js', { scope: '/' })
                     .then(registration => {
                         console.log('SW registrado con éxito:', registration.scope);
                         

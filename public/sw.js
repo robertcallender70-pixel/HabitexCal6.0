@@ -1,20 +1,20 @@
 
 /**
  * Habitex Calcula Pro - Service Worker
- * Versión: 6.0
+ * Versión: 6.3
  * Funcionalidad offline completa y compatibilidad con PWABuilder
  */
 
-const CACHE_NAME = 'habitex-calcula-v6.2';
+const CACHE_NAME = 'habitex-calcula-v6.3';
 
 const URLS_TO_PRECACHE = [
-    './',
-    'index.html',
-    'manifest.webmanifest',
-    'manifest.json',
-    'assets/icons/icon-192x192.png',
-    'assets/icons/icon-512x512.png',
-    'assets/icons/shortcut-icon-96x96.png'
+    '/',
+    '/index.html',
+    '/manifest.webmanifest',
+    '/manifest.json',
+    '/assets/icons/icon-192x192.png',
+    '/assets/icons/icon-512x512.png',
+    '/assets/icons/shortcut-icon-96x96.png'
 ];
 
 // Orígenes de confianza para la caché (CDNs y dominio local)
@@ -83,11 +83,17 @@ self.addEventListener('fetch', event => {
     if (event.request.url.startsWith('chrome-extension://')) return;
 
     const url = new URL(event.request.url);
-    const isDomainTrusted = TRUSTED_DOMAINS.some(domain => url.hostname.includes(domain));
-    if (!isDomainTrusted) return;
+    
+    // Todo lo que sea del propio origen se procesa siempre.
+    // Para orígenes externos (CDNs o fuentes), verificamos si está en dominios de confianza.
+    const isSameOrigin = url.origin === location.origin;
+    const isCDNDomain = TRUSTED_DOMAINS.some(domain => url.hostname.includes(domain));
+    if (!isSameOrigin && !isCDNDomain) return;
 
     // Estrategia de caché:
-    const isNavigation = event.request.mode === 'navigate';
+    // Considerar navegación real o peticiones directas de root del mismo origen como navegación
+    const isNavigation = event.request.mode === 'navigate' || 
+                         (isSameOrigin && (url.pathname === '/' || url.pathname === '/index.html'));
 
     // Función auxiliar para determinar si la respuesta es válida para cachear.
     // Guardamos respuestas exitosas (status 200) y de orígenes cruzados opacos (status 0).
@@ -109,25 +115,27 @@ self.addEventListener('fetch', event => {
                     return networkResponse;
                 })
                 .catch(() => {
-                    return caches.match(event.request).then(cachedResponse => {
+                    // Usamos { ignoreSearch: true } para que parámetros de testing o trackers (like ?utm_source) no rompan la búsqueda en la caché
+                    return caches.match(event.request, { ignoreSearch: true }).then(cachedResponse => {
                         if (cachedResponse) return cachedResponse;
                         // Fallback absoluto para SPA offline
-                        return caches.match('index.html')
-                            .then(r => r || caches.match('./'))
-                            .then(r => r || caches.match('./index.html'));
+                        return caches.match('index.html', { ignoreSearch: true })
+                            .then(r => r || caches.match('./', { ignoreSearch: true }))
+                            .then(r => r || caches.match('/index.html', { ignoreSearch: true }))
+                            .then(r => r || caches.match('/', { ignoreSearch: true }));
                     });
                 })
         );
     } else {
         // --- Cache-First con actualización silenciosa de fondo (ideal para JS dinámico y CDNs estáticos) ---
         event.respondWith(
-            caches.match(event.request).then(cachedResponse => {
+            caches.match(event.request, { ignoreSearch: true }).then(cachedResponse => {
                 if (cachedResponse) {
                     // Seguimos refrescando en segundo plano para cachear nuevas actualizaciones
                     fetch(event.request).then(networkResponse => {
                         if (isCacheable(networkResponse)) {
                             caches.open(CACHE_NAME).then(cache => {
-                                cache.put(event.request, networkResponse);
+                                cache.put(event.request, networkResponse.clone());
                             });
                         }
                     }).catch(() => {/* Silenciar caídas de red de background o modo offline */});

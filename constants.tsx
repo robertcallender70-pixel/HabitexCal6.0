@@ -3,7 +3,7 @@ import React from 'react';
 import { ActivityType } from './types';
 import type { HormigonData, AceroData, PredefinedLaborActivity } from './types';
 
-export const APP_VERSION = "6.0";
+export const APP_VERSION = "6.3";
 
 export const HORMIGONES_DATA: HormigonData[] = [
     { resistencia: 100, cemento: 6.0, arena: 0.54, piedra: 1.08, agua: 180 },
