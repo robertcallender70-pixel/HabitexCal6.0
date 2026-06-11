@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node convert-icons.js && vite build",
+    "build": "node convert-icons.js > convert-log.txt 2>&1 && vite build",
     "preview": "vite preview"
   },
   "dependencies": {

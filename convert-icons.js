@@ -179,12 +179,17 @@ async function processImage(srcPath, destPath, width, height) {
             if (typeof image.getBufferAsync === 'function') {
                 buffer = await image.getBufferAsync('image/png');
             } else if (typeof image.getBuffer === 'function') {
-                buffer = await new Promise((resolve, reject) => {
-                    image.getBuffer('image/png', (err, buf) => {
-                        if (err) reject(err);
-                        else resolve(buf);
+                const res = image.getBuffer('image/png');
+                if (res instanceof Promise) {
+                    buffer = await res;
+                } else {
+                    buffer = await new Promise((resolve, reject) => {
+                        image.getBuffer('image/png', (err, buf) => {
+                            if (err) reject(err);
+                            else resolve(buf);
+                        });
                     });
-                });
+                }
             }
         } catch (bufErr) {
             console.warn('[Icon-Converter] Warn obtaining PNG buffer, falling back to write:', bufErr);
