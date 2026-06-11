@@ -5,7 +5,7 @@
  * Funcionalidad offline completa y compatibilidad con PWABuilder
  */
 
-const CACHE_NAME = 'habitex-calcula-v6.0';
+const CACHE_NAME = 'habitex-calcula-v6.1';
 
 const URLS_TO_PRECACHE = [
     './',
@@ -87,14 +87,19 @@ self.addEventListener('fetch', event => {
 
     // Estrategia de caché:
     const isNavigation = event.request.mode === 'navigate';
-    const isStaticAsset = url.pathname.includes('/assets/') || url.pathname.includes('/icons/') || url.hostname !== location.hostname;
+
+    // Función auxiliar para determinar si la respuesta es válida para cachear.
+    // Guardamos respuestas exitosas (status 200) y de orígenes cruzados opacos (status 0).
+    const isCacheable = (res) => {
+        return res && (res.status === 200 || res.status === 0);
+    };
 
     if (isNavigation || url.pathname.endsWith('manifest.json')) {
         // --- Network-First con fallback a caché (muy útil para index.html o manifest.json cambiantes) ---
         event.respondWith(
             fetch(event.request)
                 .then(networkResponse => {
-                    if (networkResponse && networkResponse.status === 200) {
+                    if (isCacheable(networkResponse)) {
                         const responseToCache = networkResponse.clone();
                         caches.open(CACHE_NAME).then(cache => {
                             cache.put(event.request, responseToCache);
@@ -119,7 +124,7 @@ self.addEventListener('fetch', event => {
                 if (cachedResponse) {
                     // Seguimos refrescando en segundo plano para cachear nuevas actualizaciones
                     fetch(event.request).then(networkResponse => {
-                        if (networkResponse && networkResponse.status === 200) {
+                        if (isCacheable(networkResponse)) {
                             caches.open(CACHE_NAME).then(cache => {
                                 cache.put(event.request, networkResponse);
                             });
@@ -131,7 +136,7 @@ self.addEventListener('fetch', event => {
 
                 // Si no está registrado en la caché, hacemos el fetch de red
                 return fetch(event.request).then(networkResponse => {
-                    if (networkResponse && networkResponse.status === 200) {
+                    if (isCacheable(networkResponse)) {
                         const responseToCache = networkResponse.clone();
                         caches.open(CACHE_NAME).then(cache => {
                             cache.put(event.request, responseToCache);

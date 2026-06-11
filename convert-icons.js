@@ -51,18 +51,39 @@ async function processImage(srcPath, destPath, width, height) {
             }
         }
 
-        // Version-agnostic write
+        // Version-agnostic writing with forced PNG encoding
+        console.log(`[Icon-Converter] Encoding image to true PNG buffer...`);
+        let buffer;
         try {
-            if (typeof image.writeAsync === 'function') {
-                await image.writeAsync(destPath);
-            } else {
+            if (typeof image.getBufferAsync === 'function') {
+                buffer = await image.getBufferAsync('image/png');
+            } else if (typeof image.getBuffer === 'function') {
+                buffer = await new Promise((resolve, reject) => {
+                    image.getBuffer('image/png', (err, buf) => {
+                        if (err) reject(err);
+                        else resolve(buf);
+                    });
+                });
+            }
+        } catch (bufErr) {
+            console.warn('[Icon-Converter] Warn obtaining PNG buffer, falling back to write:', bufErr);
+        }
+
+        if (buffer) {
+            fs.writeFileSync(destPath, buffer);
+            console.log(`[Icon-Converter] SUCCESS forced PNG buffer: Wrote true PNG (${width}x${height}) to ${destPath}`);
+        } else {
+            try {
+                if (typeof image.writeAsync === 'function') {
+                    await image.writeAsync(destPath);
+                } else {
+                    await image.write(destPath);
+                }
+            } catch (writeErr) {
                 await image.write(destPath);
             }
-        } catch (writeErr) {
-            await image.write(destPath);
+            console.log(`[Icon-Converter] SUCCESS standard write: Wrote PNG (${width}x${height}) to ${destPath}`);
         }
-        
-        console.log(`[Icon-Converter] SUCCESS: Wrote true PNG (${width}x${height}) to ${destPath}`);
     } catch (error) {
         console.error(`[Icon-Converter] ERROR processing image ${srcPath}:`, error);
         
