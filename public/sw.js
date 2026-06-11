@@ -23,6 +23,8 @@ const TRUSTED_DOMAINS = [
     'cdnjs.cloudflare.com',
     'aistudiocdn.com',
     'esm.sh',
+    'fonts.googleapis.com',
+    'fonts.gstatic.com',
     location.hostname
 ];
 
@@ -104,7 +106,9 @@ self.addEventListener('fetch', event => {
                     return caches.match(event.request).then(cachedResponse => {
                         if (cachedResponse) return cachedResponse;
                         // Fallback absoluto para SPA offline
-                        return caches.match('./index.html') || caches.match('./') || caches.match('index.html');
+                        return caches.match('index.html')
+                            .then(r => r || caches.match('./'))
+                            .then(r => r || caches.match('./index.html'));
                     });
                 })
         );
