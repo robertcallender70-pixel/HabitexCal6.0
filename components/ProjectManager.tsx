@@ -1615,6 +1615,22 @@ export const ProjectManager: React.FC = () => {
         }
     };
 
+    const handleDownloadInvoicePdf = (pdfBlob: Blob, certName: string) => {
+        try {
+            const url = URL.createObjectURL(pdfBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Factura_${certName.replace(/\s+/g, '_') || 'Certificacion'}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 2000);
+        } catch (error) {
+            console.error("Error downloading invoice PDF:", error);
+            alert("No se pudo descargar el PDF automáticamente.");
+        }
+    };
+
     const handleFullCertificationAndInvoice = async () => {
         if (!selectedProject) return;
         setIsLoading(true);
@@ -2244,7 +2260,43 @@ export const ProjectManager: React.FC = () => {
                 </div>
             </div>
             
-            <div className="bg-slate-100/70 p-1.5 rounded-2xl border border-slate-200/40 mb-6 max-w-full overflow-x-auto flex gap-1.5 scrollbar-none">
+            {/* Selector de Vistas adaptado a Móvil (Dropdown) y Escritorio (Pestañas) */}
+            <div className="block md:hidden mb-6">
+                <label className="block text-xs font-bold text-slate-550 uppercase mb-2 tracking-wider">Sección del Proyecto</label>
+                <div className="relative">
+                    <select
+                        id="view-selector"
+                        value={currentView}
+                        onChange={(e) => {
+                            const val = e.target.value as any;
+                            if (val === 'budget' || val === 'inventory' || val === 'certifications') {
+                                if (isPro) setCurrentView(val);
+                                else setIsLicenseModalOpen(true);
+                            } else {
+                                setCurrentView(val);
+                            }
+                        }}
+                        className="w-full bg-white text-slate-800 border border-slate-205 rounded-xl px-4 py-3 font-bold text-sm shadow-sm focus:border-cyan-500 focus:ring-cyan-500 appearance-none"
+                    >
+                        <option value="financials">📊 {isParentProject ? 'Finanzas Consolidadas' : 'Control Financiero'}</option>
+                        {isParentProject && <option value="objetos-de-obra">🧱 Objetos de Obra</option>}
+                        {!isParentProject && (
+                            <>
+                                <option value="materials">📐 Cálculo de Materiales</option>
+                                <option value="labor">🛠️ Mano de Obra</option>
+                                <option value="budget">💰 Otros Gastos (Plan) {!isPro ? '⭐ PRO' : ''}</option>
+                            </>
+                        )}
+                        <option value="inventory">📦 Inventario {isParentProject ? '(Consolidado)' : ''} {!isPro ? '⭐ PRO' : ''}</option>
+                        <option value="certifications">📜 Certificaciones y Facturas {!isPro ? '⭐ PRO' : ''}</option>
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
+                        <ChevronDownIcon className="h-5 w-5" />
+                    </div>
+                </div>
+            </div>
+            
+            <div className="hidden md:flex bg-slate-100/70 p-1.5 rounded-2xl border border-slate-200/40 mb-6 max-w-full overflow-x-auto gap-1.5 scrollbar-none">
                 <button
                     onClick={() => setCurrentView('financials')}
                     className={`${
@@ -3365,23 +3417,31 @@ export const ProjectManager: React.FC = () => {
                                     </div>
 
                                     <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap justify-end gap-2">
-                                        {cert.invoicePdfBlob ? (
-                                            <button 
-                                                onClick={() => handleViewInvoicePdf(cert.invoicePdfBlob!)}
-                                                className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 text-slate-700 rounded-md hover:bg-slate-200 text-sm"
-                                            >
-                                                <EyeIcon className="h-4 w-4" /> Ver Factura
-                                            </button>
-                                        ) : (
-                                            <button 
-                                                onClick={() => { setInvoiceData({ cert, prevCert }); setIsInvoiceModalOpen(true); }}
-                                                className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 text-sm"
-                                            >
-                                                <DocumentIcon className="h-4 w-4" /> Generar Factura
-                                            </button>
-                                        )}
+                                         {cert.invoicePdfBlob && (
+                                              <>
+                                                  <button 
+                                                      onClick={() => handleViewInvoicePdf(cert.invoicePdfBlob!)}
+                                                      className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 text-slate-700 rounded-md hover:bg-slate-200 text-sm font-medium"
+                                                  >
+                                                      <EyeIcon className="h-4 w-4" /> Ver
+                                                  </button>
+                                                  <button 
+                                                      onClick={() => handleDownloadInvoicePdf(cert.invoicePdfBlob!, cert.name)}
+                                                      className="flex items-center gap-1 px-3 py-1.5 bg-cyan-100 text-cyan-800 rounded-md hover:bg-cyan-200 text-sm font-medium"
+                                                      title="Descargar Factura en PDF"
+                                                  >
+                                                      <ArrowDownTrayIcon className="h-4 w-4" /> Descargar PDF
+                                                  </button>
+                                              </>
+                                         )}
+                                         <button 
+                                             onClick={() => { setInvoiceData({ cert, prevCert }); setIsInvoiceModalOpen(true); }}
+                                             className="flex items-center gap-1 px-3 py-1.5 bg-cyan-50 text-cyan-700 hover:bg-cyan-100 rounded-md text-sm font-medium border border-cyan-100"
+                                         >
+                                             <DocumentIcon className="h-4 w-4" /> {cert.invoicePdfBlob ? 'Regenerar Factura' : 'Generar Factura'}
+                                         </button>
                                         
-                                        {!isPaid && (
+                                         {!isPaid && (
                                             <button 
                                                 onClick={() => handleRegisterPayment(cert)}
                                                 className="flex items-center gap-1 px-3 py-1.5 bg-green-50 text-green-700 rounded-md hover:bg-green-100 text-sm"

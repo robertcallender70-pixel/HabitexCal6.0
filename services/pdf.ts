@@ -497,13 +497,32 @@ export const exportInvoiceToPDF = (data: InvoiceData): Blob => {
 
     // --- High-Contract Totals Block (Right Aligned) ---
     y += 10;
-    const totalsCardX = 120;
-    const totalsW = 76;
+    const totalsCardX = 96; // Shifted left from 120 to 96 to provide extra horizontal spacing
+    const totalsW = 100;    // Widened from 76 to 100 to prevent overlap of large CUP amounts
     const totalsH = 26;
     doc.setFillColor(240, 249, 250); // Light Cyan fill
     doc.setDrawColor(15, 118, 110);   // Teal perimeter
     doc.setLineWidth(0.5);
     doc.roundedRect(totalsCardX, y, totalsW, totalsH, 2, 2, 'FD');
+
+    // Prepare formatted amount strings
+    const amountMnStr = `$${(invoiceTotal * exchangeRate).toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+    const amountUsdStr = `$${invoiceTotal.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+
+    // Dynamically adjust font size for extremely large currency amounts
+    let amountMnFontSize = 13;
+    if (amountMnStr.length > 15) {
+        amountMnFontSize = 9.5;
+    } else if (amountMnStr.length > 12) {
+        amountMnFontSize = 11;
+    }
+
+    let amountUsdFontSize = 11;
+    if (amountUsdStr.length > 15) {
+        amountUsdFontSize = 8.5;
+    } else if (amountUsdStr.length > 12) {
+        amountUsdFontSize = 9.5;
+    }
 
     // Totals text layout
     doc.setFontSize(9.5);
@@ -512,15 +531,15 @@ export const exportInvoiceToPDF = (data: InvoiceData): Blob => {
     doc.text('TOTAL NETO A PAGAR (MN):', totalsCardX + 5, y + 8);
     doc.text('Importe Equivalente (USD):', totalsCardX + 5, y + 18);
 
-    doc.setFontSize(13);
+    doc.setFontSize(amountMnFontSize);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(15, 118, 110); // Heavy Teal
-    doc.text(`$${(invoiceTotal * exchangeRate).toLocaleString('en-US', {minimumFractionDigits: 2})}`, totalsCardX + totalsW - 5, y + 8, { align: 'right' });
+    doc.text(amountMnStr, totalsCardX + totalsW - 5, y + 8, { align: 'right' });
     
-    doc.setFontSize(11);
+    doc.setFontSize(amountUsdFontSize);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100, 116, 139);
-    doc.text(`$${invoiceTotal.toLocaleString('en-US', {minimumFractionDigits: 2})}`, totalsCardX + totalsW - 5, y + 18, { align: 'right' });
+    doc.text(amountUsdStr, totalsCardX + totalsW - 5, y + 18, { align: 'right' });
 
     y += 35;
 

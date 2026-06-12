@@ -43,12 +43,12 @@ export const MORTEROS_REVESTIMIENTO_DATA = [
 
 // Estimaciones teóricas para referencia (MPa basadas en resultados reales)
 export const DOSIFICACIONES_REFERENCIA = [
-    { ratio: '1:3:6', mpa: 100, factores: { cemento: 6.0, arena: 0.54, piedra: 1.08, agua: 180 } },
-    { ratio: '1:2.5:4', mpa: 150, factores: { cemento: 7.2, arena: 0.55, piedra: 0.88, agua: 195 } },
-    { ratio: '1:2.5:3', mpa: 175, factores: { cemento: 8.0, arena: 0.60, piedra: 0.72, agua: 205 } },
-    { ratio: '1:2:3', mpa: 210, factores: { cemento: 8.5, arena: 0.52, piedra: 0.78, agua: 210 } },
-    { ratio: '1:1.5:2.5', mpa: 250, factores: { cemento: 9.5, arena: 0.44, piedra: 0.73, agua: 225 } },
-    { ratio: '1:1:2', mpa: 300, factores: { cemento: 11.0, arena: 0.33, piedra: 0.66, agua: 230 } },
+    { ratio: '1:3:6', mpa: 100, nombre: 'Hormigón de Limpieza', uso: ['Hormigón de limpieza', 'Cimientos no estructurales', 'Rellenos'], factores: { cemento: 6.0, arena: 0.54, piedra: 1.08, agua: 180 } },
+    { ratio: '1:2.5:4', mpa: 150, nombre: 'Hormigón Pobre / Contrapisos', uso: ['Aceras', 'Contrapisos', 'Bordillos'], factores: { cemento: 7.2, arena: 0.55, piedra: 0.88, agua: 195 } },
+    { ratio: '1:2.5:3', mpa: 175, nombre: 'Hormigón de Retención / Estructural Bajo', uso: ['Zapata de muros', 'Soleras', 'Dinteles'], factores: { cemento: 8.0, arena: 0.60, piedra: 0.72, agua: 205 } },
+    { ratio: '1:2:3', mpa: 210, nombre: 'Hormigón Estructural Estándar', uso: ['Columnas', 'Vigas', 'Losas', 'Zapata de cimientos'], factores: { cemento: 8.5, arena: 0.52, piedra: 0.78, agua: 210 } },
+    { ratio: '1:1.5:2.5', mpa: 250, nombre: 'Hormigón de Alta Resistencia', uso: ['Estructuras de carga', 'Losas de tráfico', 'Preesforzados'], factores: { cemento: 9.5, arena: 0.44, piedra: 0.73, agua: 225 } },
+    { ratio: '1:1:2', mpa: 300, nombre: 'Hormigón de Muy Alta Resistencia', uso: ['Depósitos de agua', 'Zonas de alta presión', 'Muros de contención'], factores: { cemento: 11.0, arena: 0.33, piedra: 0.66, agua: 230 } },
 ];
 
 export const MORTEROS_PISO_DATA = [

@@ -187,7 +187,7 @@ const ActivityForm = ({ activityType, onSave, onCancel, initialData = {}, initia
                 {formData.ratio && (
                     <div className="p-3 bg-cyan-50 rounded-md text-sm text-cyan-800">
                         <p><strong>MPa Estimado:</strong> {DOSIFICACIONES_REFERENCIA.find(d => d.ratio === formData.ratio)?.mpa} MPa</p>
-                        <p><strong>Uso Recomendado:</strong> {DOSIFICACIONES_REFERENCIA.find(d => d.ratio === formData.ratio)?.uso.join(', ')}</p>
+                        <p><strong>Uso Recomendado:</strong> {DOSIFICACIONES_REFERENCIA.find(d => d.ratio === formData.ratio)?.uso?.join(', ') || 'N/A'}</p>
                     </div>
                 )}
                 <Select label="Resistencia Hormigón (Kg/cm²) - Referencia" name="resistencia" value={formData.resistencia || ''} onChange={handleChange} disabled={!!formData.ratio}>
@@ -233,7 +233,7 @@ const ActivityForm = ({ activityType, onSave, onCancel, initialData = {}, initia
             {formData.ratio && (
                 <div className="p-3 bg-cyan-50 rounded-md text-sm text-cyan-800">
                     <p><strong>MPa Estimado:</strong> {DOSIFICACIONES_REFERENCIA.find(d => d.ratio === formData.ratio)?.mpa} MPa</p>
-                    <p><strong>Uso Recomendado:</strong> {DOSIFICACIONES_REFERENCIA.find(d => d.ratio === formData.ratio)?.uso.join(', ')}</p>
+                    <p><strong>Uso Recomendado:</strong> {DOSIFICACIONES_REFERENCIA.find(d => d.ratio === formData.ratio)?.uso?.join(', ') || 'N/A'}</p>
                 </div>
             )}
             <Select label="Resistencia Hormigón (Kg/cm²)" name="resistencia" value={formData.resistencia || ''} onChange={handleChange} disabled={!!formData.ratio}>
@@ -349,7 +349,7 @@ const ActivityForm = ({ activityType, onSave, onCancel, initialData = {}, initia
             {formData.ratio && (
                 <div className="p-3 bg-cyan-50 rounded-md text-sm text-cyan-800">
                     <p><strong>MPa Estimado:</strong> {DOSIFICACIONES_REFERENCIA.find(d => d.ratio === formData.ratio)?.mpa} MPa</p>
-                    <p><strong>Uso Recomendado:</strong> {DOSIFICACIONES_REFERENCIA.find(d => d.ratio === formData.ratio)?.uso.join(', ')}</p>
+                    <p><strong>Uso Recomendado:</strong> {DOSIFICACIONES_REFERENCIA.find(d => d.ratio === formData.ratio)?.uso?.join(', ') || 'N/A'}</p>
                 </div>
             )}
             <Select label="Resistencia Hormigón (Kg/cm²) - Referencia" name="resistencia" value={formData.resistencia || ''} onChange={handleChange} disabled={!!formData.ratio}>
