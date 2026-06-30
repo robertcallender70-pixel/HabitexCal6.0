@@ -49,8 +49,13 @@ const OfferModal: React.FC<OfferModalProps> = ({ isOpen, onClose, project, total
     const [signerTitle, setSignerTitle] = React.useState('');
 
     const scheduleMetrics = React.useMemo(() => {
-        return calculateSchedule(laborItems, project?.startDate);
-    }, [laborItems, project?.startDate]);
+        return calculateSchedule(
+            laborItems, 
+            project?.startDate,
+            !!project?.excludeSaturdays,
+            !!project?.excludeSundays
+        );
+    }, [laborItems, project?.startDate, project?.excludeSaturdays, project?.excludeSundays]);
 
     React.useEffect(() => {
         if (isOpen) {
@@ -173,11 +178,11 @@ const OfferModal: React.FC<OfferModalProps> = ({ isOpen, onClose, project, total
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg text-sm border border-slate-250">
                         <div>
                             <span className="block font-semibold text-slate-600 mb-1">Duración Total de la Obra:</span>
-                            <span className="text-slate-800 font-bold text-base">{scheduleMetrics.totalDurationDays} días</span>
+                            <span className="text-slate-800 font-bold text-base">{scheduleMetrics.totalDurationDays} días hábiles ({scheduleMetrics.totalCalendarDays || scheduleMetrics.totalDurationDays} totales)</span>
                         </div>
                         <div>
                             <span className="block font-semibold text-slate-600 mb-1">Tiempo de Obra Restante (Faltante):</span>
-                            <span className="text-cyan-700 font-bold text-base">{scheduleMetrics.remainingDurationDays} días</span>
+                            <span className="text-cyan-700 font-bold text-base">{scheduleMetrics.remainingDurationDays} días hábiles ({scheduleMetrics.remainingCalendarDays || scheduleMetrics.remainingDurationDays} totales)</span>
                         </div>
                         <div className="mt-2 md:mt-0">
                             <span className="block font-semibold text-slate-600 mb-1">Trabajadores Promedio (Cuadrilla):</span>

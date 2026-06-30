@@ -86,7 +86,12 @@ export default function ActivityScheduler({
 
     // Parse and estimate duration/dates using centralized schedule service
     const scheduleData = React.useMemo(() => {
-        const metrics = calculateSchedule(laborItems, projectStartDate);
+        const metrics = calculateSchedule(
+            laborItems, 
+            projectStartDate,
+            !!project.excludeSaturdays,
+            !!project.excludeSundays
+        );
         
         // Find earliest start and latest end for proper Gantt rendering
         const scheduleItemsArr = Object.values(metrics.scheduleItems);
@@ -101,12 +106,14 @@ export default function ActivityScheduler({
             schedule: metrics.scheduleItems,
             totalDurationDays: metrics.totalDurationDays,
             remainingDurationDays: metrics.remainingDurationDays,
+            totalCalendarDays: metrics.totalCalendarDays || 0,
+            remainingCalendarDays: metrics.remainingCalendarDays || 0,
             startDate: earliestStart,
             endDate: latestEnd,
             avgWorkers: metrics.avgWorkers,
             maxWorkers: metrics.maxWorkers
         };
-    }, [laborItems, projectStartDate]);
+    }, [laborItems, projectStartDate, project.excludeSaturdays, project.excludeSundays]);
 
     const containerRef = React.useRef<HTMLDivElement>(null);
     const [barCoords, setBarCoords] = React.useState<Record<number, { xStart: number, xEnd: number, y: number }>>({});
@@ -204,29 +211,115 @@ export default function ActivityScheduler({
     const sortedScheduleList = Object.values(scheduleData.schedule).sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
 
     // Timeline columns generation for visual rendering
-    const timelineDuration = scheduleData.totalDurationDays;
+    const timelineDuration = scheduleData.totalCalendarDays || scheduleData.totalDurationDays || 1;
     const projectStart = scheduleData.startDate;
 
     const timelineHeaders: string[] = [];
+    const timelineDates: Date[] = [];
     if (scale === 'days') {
-        // Limit columns display in Gantt to avoid UI overflow (max 28 days shown, or step by days)
+        // Limit columns display in Gantt to avoid UI overflow (max 45 days shown, or step by days)
         const showDays = Math.min(45, timelineDuration);
         for (let i = 0; i < showDays; i++) {
             const d = new Date(projectStart);
             d.setDate(projectStart.getDate() + i);
             timelineHeaders.push(d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }));
+            timelineDates.push(d);
         }
     } else {
         const weeksCount = Math.ceil(timelineDuration / 7);
         for (let i = 0; i < Math.max(4, weeksCount); i++) {
             timelineHeaders.push(`Semana ${i + 1}`);
+            const d = new Date(projectStart);
+            d.setDate(projectStart.getDate() + i * 7);
+            timelineDates.push(d);
         }
     }
+
+    const getSegments = (itemStartDate: Date, itemEndDate: Date, startCol: number, colSpan: number) => {
+        if (scale !== 'days') {
+            const sDate = new Date(itemStartDate);
+            const eDate = new Date(itemEndDate);
+            return [{
+                startCol: startCol,
+                colSpan: colSpan,
+                datesLabel: sDate.toLocaleDateString('es-ES', { day: 'numeric' }) === eDate.toLocaleDateString('es-ES', { day: 'numeric' })
+                    ? sDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+                    : `${sDate.toLocaleDateString('es-ES', { day: 'numeric' })} - ${eDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`
+            }];
+        }
+
+        const segments: Array<{ startCol: number; colSpan: number; datesLabel: string }> = [];
+        let currentSegmentStartIdx: number | null = null;
+
+        for (let idx = 0; idx < timelineDates.length; idx++) {
+            const date = timelineDates[idx];
+            
+            const compDate = new Date(date);
+            compDate.setHours(0,0,0,0);
+            
+            const sDate = new Date(itemStartDate);
+            sDate.setHours(0,0,0,0);
+            
+            const eDate = new Date(itemEndDate);
+            eDate.setHours(0,0,0,0);
+
+            const inRange = compDate >= sDate && compDate <= eDate;
+            
+            const day = compDate.getDay();
+            const isSaturday = day === 6;
+            const isSunday = day === 0;
+            const isWorkingDay = !((isSaturday && !!project.excludeSaturdays) || (isSunday && !!project.excludeSundays));
+
+            if (inRange && isWorkingDay) {
+                if (currentSegmentStartIdx === null) {
+                    currentSegmentStartIdx = idx;
+                }
+            } else {
+                if (currentSegmentStartIdx !== null) {
+                    const segStartCol = currentSegmentStartIdx;
+                    const segColSpan = idx - currentSegmentStartIdx;
+                    
+                    const sSegDate = timelineDates[segStartCol];
+                    const eSegDate = timelineDates[idx - 1];
+                    const datesLabel = sSegDate.toLocaleDateString('es-ES', { day: 'numeric' }) === eSegDate.toLocaleDateString('es-ES', { day: 'numeric' })
+                        ? sSegDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+                        : `${sSegDate.toLocaleDateString('es-ES', { day: 'numeric' })} - ${eSegDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`;
+
+                    segments.push({
+                        startCol: segStartCol,
+                        colSpan: segColSpan,
+                        datesLabel
+                    });
+                    currentSegmentStartIdx = null;
+                }
+            }
+        }
+
+        if (currentSegmentStartIdx !== null) {
+            const segStartCol = currentSegmentStartIdx;
+            const segColSpan = timelineDates.length - currentSegmentStartIdx;
+            const sSegDate = timelineDates[segStartCol];
+            const eSegDate = timelineDates[timelineDates.length - 1];
+            
+            const finalEnd = eSegDate < itemEndDate ? eSegDate : itemEndDate;
+            const datesLabel = sSegDate.toLocaleDateString('es-ES', { day: 'numeric' }) === finalEnd.toLocaleDateString('es-ES', { day: 'numeric' })
+                ? sSegDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+                : `${sSegDate.toLocaleDateString('es-ES', { day: 'numeric' })} - ${finalEnd.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`;
+
+            segments.push({
+                startCol: segStartCol,
+                colSpan: segColSpan,
+                datesLabel
+            });
+        }
+
+        return segments;
+    };
 
     return (
         <div className="space-y-6">
             {/* Informative Guidance Section */}
-            <div className="bg-gradient-to-r from-cyan-50/60 to-blue-50/40 p-5 rounded-2xl border border-cyan-100/50 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+            <div className="bg-gradient-to-r from-cyan-50/60 to-blue-50/40 p-5 rounded-2xl border border-cyan-100/50 flex flex-col xl:flex-row xl:items-center justify-between gap-4 shadow-sm">
                 <div className="space-y-1 max-w-3xl">
                     <h4 className="font-bold text-slate-800 flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-cyan-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -239,15 +332,49 @@ export default function ActivityScheduler({
                         Configure las dependencias (predecesoras) para encadenar las fases una tras otra, o déjelas vacías para realizarlas de forma conjunta en paralelo.
                     </p>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-end">
                     <div>
-                        <label className="block text-xs font-bold text-slate-600 mb-1 tracking-wide uppercase">Fecha de Inicio de Obra</label>
+                        <label className="block text-xs font-bold text-slate-600 mb-1 tracking-wide uppercase">Inicio de Obra</label>
                         <input
                             type="date"
                             value={projectStartDate}
                             onChange={handleStartDateChange}
                             className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-semibold shadow-sm focus:border-cyan-500 focus:ring-cyan-500 text-slate-850"
                         />
+                    </div>
+                    
+                    <div className="flex items-center gap-4 bg-white/80 p-2 px-3.5 rounded-xl border border-slate-200/80 shadow-xs">
+                        <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-slate-700">
+                            <input
+                                type="checkbox"
+                                checked={!!project.excludeSaturdays}
+                                onChange={async (e) => {
+                                    await onUpdateProject({
+                                        ...project,
+                                        excludeSaturdays: e.target.checked
+                                    });
+                                }}
+                                className="w-4 h-4 text-cyan-650 border-slate-300 rounded focus:ring-cyan-550 cursor-pointer"
+                            />
+                            <span>Quitar Sábados</span>
+                        </label>
+                        
+                        <div className="w-px h-4 bg-slate-200" />
+
+                        <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-slate-700">
+                            <input
+                                type="checkbox"
+                                checked={!!project.excludeSundays}
+                                onChange={async (e) => {
+                                    await onUpdateProject({
+                                        ...project,
+                                        excludeSundays: e.target.checked
+                                    });
+                                }}
+                                className="w-4 h-4 text-cyan-650 border-slate-300 rounded focus:ring-cyan-550 cursor-pointer"
+                            />
+                            <span>Quitar Domingos</span>
+                        </label>
                     </div>
                 </div>
             </div>
@@ -262,8 +389,13 @@ export default function ActivityScheduler({
                     </div>
                     <div>
                         <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Duración de Obra</p>
-                        <h4 className="text-2xl font-bold text-slate-800">{timelineDuration} <span className="text-sm font-medium text-slate-500">días total</span></h4>
-                        <p className="text-xs font-bold text-cyan-600 mt-0.5">Restan: {scheduleData.remainingDurationDays} días</p>
+                        <h4 className="text-2xl font-bold text-slate-800">
+                            {scheduleData.totalDurationDays} <span className="text-sm font-medium text-slate-500">días hábiles</span>
+                        </h4>
+                        <p className="text-xs font-bold text-slate-500 mt-0.5">{scheduleData.totalCalendarDays} días totales</p>
+                        <p className="text-[11px] font-bold text-cyan-600 mt-1">
+                            Restan: {scheduleData.remainingDurationDays} hábiles ({scheduleData.remainingCalendarDays} tot.)
+                        </p>
                     </div>
                 </div>
 
@@ -336,11 +468,28 @@ export default function ActivityScheduler({
                             <div className="col-span-3">Actividad / Tarea</div>
                             <div className="col-span-1 text-center">Duración</div>
                             <div className="col-span-8 grid" style={{ gridTemplateColumns: `repeat(${timelineHeaders.length}, minmax(0, 1fr))` }}>
-                                {timelineHeaders.map((head, i) => (
-                                    <div key={i} className="text-center text-[10px] truncate border-l border-slate-100/80 px-1" title={head}>
-                                        {head}
-                                    </div>
-                                ))}
+                                {timelineHeaders.map((head, i) => {
+                                    const date = timelineDates[i];
+                                    const day = date?.getDay();
+                                    const isSaturday = day === 6;
+                                    const isSunday = day === 0;
+                                    const isExcludedSat = isSaturday && !!project.excludeSaturdays;
+                                    const isExcludedSun = isSunday && !!project.excludeSundays;
+                                    const isWeekend = isExcludedSat || isExcludedSun;
+                                    return (
+                                        <div 
+                                            key={i} 
+                                            className={`text-center text-[10px] truncate border-l border-slate-100/80 px-1 py-0.5 rounded-sm transition-colors ${
+                                                isWeekend && scale === 'days'
+                                                    ? 'bg-slate-100/90 text-slate-400 font-medium' 
+                                                    : 'text-slate-500'
+                                            }`} 
+                                            title={`${head}${isWeekend && scale === 'days' ? ' (Fin de semana no laborable)' : ''}`}
+                                        >
+                                            {head}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
 
@@ -406,16 +555,21 @@ export default function ActivityScheduler({
                                 if (scale === 'days') {
                                     const diffFromStart = Math.ceil((item.startDate.getTime() - projectStart.getTime()) / (1000 * 60 * 60 * 24));
                                     startCol = Math.max(0, diffFromStart);
-                                    colSpan = item.durationDays;
+                                    
+                                    // Calculate total calendar span days for correct width placement
+                                    const taskCalendarDays = Math.max(1, Math.ceil((item.endDate.getTime() - item.startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+                                    colSpan = taskCalendarDays;
                                 } else {
                                     const diffFromStartDays = Math.ceil((item.startDate.getTime() - projectStart.getTime()) / (1000 * 60 * 60 * 24));
-                                    // Map to fractional week columns
                                     startCol = diffFromStartDays / 7;
-                                    colSpan = item.durationDays / 7;
+                                    
+                                    const taskCalendarDays = Math.max(1, Math.ceil((item.endDate.getTime() - item.startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+                                    colSpan = taskCalendarDays / 7;
                                 }
 
                                 const colorClass = getLaborColor(item.laborItem.name);
                                 const totalCols = timelineHeaders.length;
+                                const taskCalendarSpan = Math.max(1, Math.ceil((item.endDate.getTime() - item.startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
 
                                 return (
                                     <div key={item.id} className="grid grid-cols-12 gap-4 items-center group">
@@ -430,26 +584,60 @@ export default function ActivityScheduler({
                                         </div>
 
                                         {/* Duration text */}
-                                        <div className="col-span-1 text-center text-xs font-semibold text-slate-600 bg-slate-50 py-1 px-1.5 rounded-lg border">
+                                        <div className="col-span-1 text-center text-xs font-semibold text-slate-600 bg-slate-50 py-1 px-1.5 rounded-lg border" title={`${item.durationDays} días hábiles (${taskCalendarSpan} días totales)`}>
                                             {item.durationDays} d.
                                         </div>
 
                                         {/* Visual Timeline Bar representation */}
                                         <div className="col-span-8 relative h-8 bg-slate-50 rounded-xl border border-slate-100/80 overflow-hidden">
-                                            {/* Bar container */}
+                                            {/* Background weekend columns */}
+                                            {scale === 'days' && timelineDates.map((date, idx) => {
+                                                const day = date.getDay();
+                                                const isSaturday = day === 6;
+                                                const isSunday = day === 0;
+                                                const isExcludedSat = isSaturday && !!project.excludeSaturdays;
+                                                const isExcludedSun = isSunday && !!project.excludeSundays;
+                                                if (isExcludedSat || isExcludedSun) {
+                                                    return (
+                                                        <div 
+                                                            key={`bg-day-${idx}`}
+                                                            className="absolute top-0 bottom-0 bg-slate-200/55 border-r border-slate-300/20"
+                                                            style={{
+                                                                left: `${(idx / totalCols) * 100}%`,
+                                                                width: `${(1 / totalCols) * 100}%`
+                                                            }}
+                                                        />
+                                                    );
+                                                }
+                                                return null;
+                                            })}
+
+                                            {/* Invisible dummy tracking bar for dependency line calculations */}
                                             <div 
                                                 id={`gantt-bar-${item.id}`}
-                                                className={`absolute top-1 h-6 rounded-lg border shadow-xs flex items-center px-2.5 transition-all duration-300 ${colorClass}`}
+                                                className="absolute top-1 h-6 pointer-events-none opacity-0"
                                                 style={{
                                                     left: `${Math.min(99, Math.max(0, (startCol / totalCols) * 100))}%`,
                                                     width: `${Math.max(1, Math.min(100, (colSpan / totalCols) * 100))}%`
                                                 }}
-                                                title={`${item.laborItem.name}: ${item.durationDays} días (${item.startDate.toLocaleDateString()} - ${item.endDate.toLocaleDateString()})`}
-                                            >
-                                                <span className="text-[10px] font-bold tracking-wider truncate uppercase">
-                                                    {item.durationDays > 1 && `${item.startDate.toLocaleDateString('es-ES', { day: 'numeric' })} - ${item.endDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`}
-                                                </span>
-                                            </div>
+                                            />
+
+                                            {/* Real visible segments segmenting around weekends */}
+                                            {getSegments(item.startDate, item.endDate, startCol, colSpan).map((seg, sIdx) => (
+                                                <div 
+                                                    key={`${item.id}-seg-${sIdx}`}
+                                                    className={`absolute top-1 h-6 rounded-lg border shadow-xs flex items-center px-2.5 transition-all duration-300 ${colorClass}`}
+                                                    style={{
+                                                        left: `${Math.min(99, Math.max(0, (seg.startCol / totalCols) * 100))}%`,
+                                                        width: `${Math.max(1, Math.min(100, (seg.colSpan / totalCols) * 100))}%`
+                                                    }}
+                                                    title={`${item.laborItem.name}: ${item.durationDays} días hábiles, ${taskCalendarSpan} días totales (${item.startDate.toLocaleDateString()} - ${item.endDate.toLocaleDateString()})`}
+                                                >
+                                                    <span className="text-[10px] font-bold tracking-wider truncate uppercase select-none">
+                                                        {seg.datesLabel}
+                                                    </span>
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
                                 );

@@ -35,6 +35,8 @@ export interface Project {
     parentId?: number; // New field for hierarchy
     exchangeRate?: number; // For USD to MN conversion
     startDate?: string; // Date when the construction is set to start (YYYY-MM-DD)
+    excludeSaturdays?: boolean;
+    excludeSundays?: boolean;
 }
 
 export interface Activity {
@@ -276,6 +278,10 @@ export interface OfferData {
     scheduleMetrics?: {
         totalDurationDays: number;
         remainingDurationDays: number;
+        totalCalendarDays?: number;
+        totalWorkingDays?: number;
+        remainingCalendarDays?: number;
+        remainingWorkingDays?: number;
         totalWorkers: number;
         avgWorkers: number;
         maxWorkers: number;
