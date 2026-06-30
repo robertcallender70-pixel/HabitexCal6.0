@@ -108,6 +108,42 @@ export default function ActivityScheduler({
         };
     }, [laborItems, projectStartDate]);
 
+    const containerRef = React.useRef<HTMLDivElement>(null);
+    const [barCoords, setBarCoords] = React.useState<Record<number, { xStart: number, xEnd: number, y: number }>>({});
+
+    const measureBars = React.useCallback(() => {
+        const coords: Record<number, { xStart: number, xEnd: number, y: number }> = {};
+        const container = containerRef.current;
+        if (!container) return;
+        const containerRect = container.getBoundingClientRect();
+
+        const sortedList = Object.values(scheduleData.schedule).sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
+
+        sortedList.forEach((item) => {
+            const barEl = container.querySelector(`#gantt-bar-${item.id}`);
+            if (barEl) {
+                const rect = barEl.getBoundingClientRect();
+                coords[item.id] = {
+                    xStart: rect.left - containerRect.left,
+                    xEnd: rect.right - containerRect.left,
+                    y: (rect.top + rect.bottom) / 2 - containerRect.top
+                };
+            }
+        });
+        setBarCoords(coords);
+    }, [scheduleData.schedule]);
+
+    React.useEffect(() => {
+        const handle = setTimeout(() => {
+            measureBars();
+        }, 50);
+        window.addEventListener('resize', measureBars);
+        return () => {
+            clearTimeout(handle);
+            window.removeEventListener('resize', measureBars);
+        };
+    }, [measureBars]);
+
     const handleUpdateLaborItemSchedule = async (
         itemId: number, 
         workers: number, 
@@ -309,7 +345,59 @@ export default function ActivityScheduler({
                         </div>
 
                         {/* Timeline Rows */}
-                        <div className="space-y-3.5">
+                        <div ref={containerRef} className="space-y-3.5 relative">
+                            {/* SVG overlay to render dependency connecting lines/arrows */}
+                            {Object.keys(barCoords).length > 0 && (
+                                <svg className="absolute inset-0 w-full h-full pointer-events-none z-10 overflow-visible">
+                                    <defs>
+                                        <marker id="gantt-arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                            <path d="M 0 1.5 L 7 5 L 0 8.5 z" fill="#0891b2" />
+                                        </marker>
+                                    </defs>
+                                    {sortedScheduleList.map((item) => {
+                                        if (!item.predecessorId) return null;
+                                        const pred = barCoords[item.predecessorId];
+                                        const curr = barCoords[item.id];
+                                        if (!pred || !curr) return null;
+
+                                        // Path drawing algorithm
+                                        const x1 = pred.xEnd;
+                                        const y1 = pred.y;
+                                        const x2 = curr.xStart;
+                                        const y2 = curr.y;
+
+                                        let pathD = '';
+                                        const minExit = 12; // minimum horizontal distance to exit the bar before turning
+                                        
+                                        if (x2 >= x1 + minExit) {
+                                            // Normal: successor starts after predecessor ends
+                                            const midX = x1 + (x2 - x1) / 2;
+                                            pathD = `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`;
+                                        } else {
+                                            // Overlap: successor starts before predecessor ends (loop back path)
+                                            const exitX = x1 + minExit;
+                                            const entryX = x2 - minExit;
+                                            const midY = y1 + (y2 - y1) / 2;
+                                            pathD = `M ${x1} ${y1} L ${exitX} ${y1} L ${exitX} ${midY} L ${entryX} ${midY} L ${entryX} ${y2} L ${x2} ${y2}`;
+                                        }
+
+                                        return (
+                                            <g key={`dep-line-${item.id}`}>
+                                                <path
+                                                    d={pathD}
+                                                    fill="none"
+                                                    stroke="#0891b2"
+                                                    strokeWidth="1.5"
+                                                    strokeDasharray="3.5, 3"
+                                                    markerEnd="url(#gantt-arrow)"
+                                                    className="transition-all duration-300 opacity-60 hover:opacity-100 hover:stroke-2"
+                                                />
+                                            </g>
+                                        );
+                                    })}
+                                </svg>
+                            )}
+
                             {sortedScheduleList.map((item) => {
                                 // Calculate starting column offset and duration span
                                 let startCol = 0;
@@ -350,6 +438,7 @@ export default function ActivityScheduler({
                                         <div className="col-span-8 relative h-8 bg-slate-50 rounded-xl border border-slate-100/80 overflow-hidden">
                                             {/* Bar container */}
                                             <div 
+                                                id={`gantt-bar-${item.id}`}
                                                 className={`absolute top-1 h-6 rounded-lg border shadow-xs flex items-center px-2.5 transition-all duration-300 ${colorClass}`}
                                                 style={{
                                                     left: `${Math.min(99, Math.max(0, (startCol / totalCols) * 100))}%`,
