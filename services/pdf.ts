@@ -789,7 +789,50 @@ export const exportOfferFixedPriceToPDF = (data: OfferData): void => {
     doc.setTextColor(100, 116, 139);
     doc.text(`$${totals.grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD`, 190, y + 16, { align: 'right' });
     
-    y += 34;
+    y += 28;
+
+    if (data.scheduleMetrics) {
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(100, 116, 139);
+        doc.text('PLANIFICACIÓN Y FUERZA DE TRABAJO ESTIMADA', 14, y);
+        y += 6;
+
+        doc.setFillColor(250, 250, 250);
+        doc.setDrawColor(218, 226, 230);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(14, y, 182, 24, 1.5, 1.5, 'FD');
+
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(71, 85, 105);
+        
+        doc.text('Duración de Obra:', 20, y + 8);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`${data.scheduleMetrics.totalDurationDays} días de trabajo`, 56, y + 8);
+
+        doc.setFont('helvetica', 'bold');
+        doc.text('Tiempo Faltante:', 20, y + 16);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(15, 118, 110);
+        doc.text(`${data.scheduleMetrics.remainingDurationDays} días por ejecutar`, 56, y + 16);
+        doc.setTextColor(71, 85, 105);
+
+        doc.setFont('helvetica', 'bold');
+        doc.text('Cuadrilla Promedio:', 110, y + 8);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`${data.scheduleMetrics.avgWorkers} obreros`, 148, y + 8);
+
+        doc.setFont('helvetica', 'bold');
+        doc.text('Personal Máximo:', 110, y + 16);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`${data.scheduleMetrics.maxWorkers} obreros (Pico)`, 148, y + 16);
+
+        y += 34;
+    } else {
+        y += 6;
+    }
+    
     addClosingRemarks(doc, y);
     addOfferSignatureAndFooter(doc, data.offerInfo);
 
@@ -816,6 +859,39 @@ export const exportOfferDetailedToPDF = (data: OfferData): void => {
     doc.text('Desglose General y Computo de Mediciones', 14, lastY);
     lastY += 8;
 
+    if (data.scheduleMetrics) {
+        doc.setFillColor(250, 250, 250);
+        doc.setDrawColor(218, 226, 230);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(14, lastY, 182, 22, 1.5, 1.5, 'FD');
+
+        doc.setFontSize(8.5);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(100, 116, 139);
+        doc.text('RESUMEN DE TIEMPO Y FUERZA DE TRABAJO:', 20, lastY + 6);
+
+        doc.setFontSize(9.5);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(51, 65, 85);
+        doc.text('Duración de Obra:', 20, lastY + 14);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`${data.scheduleMetrics.totalDurationDays} días total`, 54, lastY + 14);
+
+        doc.setFont('helvetica', 'bold');
+        doc.text('Tiempo Faltante:', 86, lastY + 14);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(15, 118, 110);
+        doc.text(`${data.scheduleMetrics.remainingDurationDays} días`, 116, lastY + 14);
+        doc.setTextColor(51, 65, 85);
+
+        doc.setFont('helvetica', 'bold');
+        doc.text('Cuadrilla:', 148, lastY + 14);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`${data.scheduleMetrics.avgWorkers} obreros prom.`, 166, lastY + 14);
+
+        lastY += 28;
+    }
+
     // --- 1. Labor Table ---
     if (laborItems.length > 0) {
         doc.setFontSize(10.5);
@@ -825,16 +901,17 @@ export const exportOfferDetailedToPDF = (data: OfferData): void => {
         
         (doc as any).autoTable({
             startY: lastY + 3,
-            head: [['Actividad Albañilería', 'Volumen Cant.', 'Unidad', 'Precio Unit. (MN)', 'Importe Parcial (MN)']],
+            head: [['Actividad Albañilería', 'Cuadrilla', 'Volumen Cant.', 'Unidad', 'Precio Unit. (MN)', 'Importe Parcial (MN)']],
             body: laborItems.map(item => [
                 item.name,
+                `${item.scheduleWorkers ?? 2} obreros`,
                 item.quantity.toLocaleString('en-US', { maximumFractionDigits: 2 }),
                 item.unit,
                 (item.unitPrice * exchangeRate).toLocaleString('en-US', { minimumFractionDigits: 2 }),
                 (item.quantity * item.unitPrice * exchangeRate).toLocaleString('en-US', { minimumFractionDigits: 2 })
             ]),
             foot: [
-                [{ content: 'Total Estimado de Mano de Obra (MN)', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } }, { content: getMN(totals.labor), styles: { fontStyle: 'bold' } }]
+                [{ content: 'Total Estimado de Mano de Obra (MN)', colSpan: 5, styles: { halign: 'right', fontStyle: 'bold' } }, { content: getMN(totals.labor), styles: { fontStyle: 'bold' } }]
             ],
             theme: 'striped',
             headStyles: { fillColor: [15, 118, 110], textColor: 255, fontSize: 8.5 },

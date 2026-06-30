@@ -34,6 +34,7 @@ export interface Project {
     clientAddress?: string;
     parentId?: number; // New field for hierarchy
     exchangeRate?: number; // For USD to MN conversion
+    startDate?: string; // Date when the construction is set to start (YYYY-MM-DD)
 }
 
 export interface Activity {
@@ -63,6 +64,9 @@ export interface LaborItem {
     unitPrice: number; // Stored in USD
     quantity: number;
     quantityCompleted?: number;
+    scheduleWorkers?: number;
+    scheduleProductivity?: number;
+    schedulePredecessorId?: number;
 }
 
 export interface BudgetItem {
@@ -105,6 +109,7 @@ export interface PredefinedLaborActivity {
     priceUSD: number; // Changed from priceMN
     category: string;
     materialActivityType?: ActivityType;
+    productivity?: number;
 }
 
 
@@ -268,6 +273,13 @@ export interface OfferData {
     laborItems: LaborItem[]; // Prices are in USD
     materials: Material[]; // Prices are in USD
     budgetItems: BudgetItem[]; // Costs are in USD
+    scheduleMetrics?: {
+        totalDurationDays: number;
+        remainingDurationDays: number;
+        totalWorkers: number;
+        avgWorkers: number;
+        maxWorkers: number;
+    };
 }
 
 export type CustomActivityUnit = 'm' | 'm²' | 'm³' | 'unidad';

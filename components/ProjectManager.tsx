@@ -29,6 +29,7 @@ import InvoiceModal from './InvoiceModal';
 import OfferModal from './OfferModal';
 import FinancialChart from './FinancialChart';
 import DataLibrary from './DataLibrary';
+import ActivityScheduler from './ActivityScheduler';
 import FulfillNeedModal from './FulfillNeedModal';
 import PercentageInput from './PercentageInput';
 import BuyAllMaterialsModal from './BuyAllMaterialsModal';
@@ -106,7 +107,7 @@ export const ProjectManager: React.FC = () => {
     const [isLoading, setIsLoading] = React.useState(true);
     const [materialPrices, setMaterialPrices] = React.useState<Record<string, number>>({});
     const [projectCosts, setProjectCosts] = React.useState<Record<number, { usd: number, cup: number }>>({});
-    const [currentView, setCurrentView] = React.useState<'financials' | 'materials' | 'labor' | 'budget' | 'inventory' | 'certifications' | 'objetos-de-obra'>('financials');
+    const [currentView, setCurrentView] = React.useState<'financials' | 'materials' | 'labor' | 'budget' | 'inventory' | 'certifications' | 'objetos-de-obra' | 'schedule'>('financials');
     const [displayCurrency, setDisplayCurrency] = React.useState<'CUP' | 'USD'>('CUP');
     const [libraryData, setLibraryData] = React.useState<any>(null);
     const [licenseState, setLicenseState] = React.useState<LicenseState>({
@@ -2298,6 +2299,7 @@ export const ProjectManager: React.FC = () => {
                                 <option value="materials">📐 Cálculo de Materiales</option>
                                 <option value="labor">🛠️ Mano de Obra</option>
                                 <option value="budget">💰 Otros Gastos (Plan) {!isPro ? '⭐ PRO' : ''}</option>
+                                <option value="schedule">🕐 Cronograma de Ejecución {!isPro ? '⭐ PRO' : ''}</option>
                             </>
                         )}
                         <option value="inventory">📦 Inventario {isParentProject ? '(Consolidado)' : ''} {!isPro ? '⭐ PRO' : ''}</option>
@@ -2365,6 +2367,17 @@ export const ProjectManager: React.FC = () => {
                             Otros Gastos (Plan)
                             {!isPro && <ProStarIcon />}
                         </button>
+                        <button
+                            onClick={() => setCurrentView('schedule')}
+                            className={`${
+                                currentView === 'schedule'
+                                    ? 'bg-cyan-600 text-white shadow-sm'
+                                    : 'text-slate-550 hover:text-slate-800 hover:bg-white/50'
+                            } whitespace-nowrap py-2 px-3.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-200 flex items-center gap-1.5`}
+                        >
+                            Cronograma (Gantt)
+                            {!isPro && <ProStarIcon />}
+                        </button>
                     </>
                 )}
                 <button
@@ -2398,6 +2411,23 @@ export const ProjectManager: React.FC = () => {
             {!isParentProject && currentView === 'budget' && isPro && renderBudgetView()}
             {currentView === 'inventory' && isPro && renderInventoryView()}
             {currentView === 'certifications' && isPro && renderCertificationsView(isParentProject)}
+            {!isParentProject && currentView === 'schedule' && (
+                <ActivityScheduler
+                    project={selectedProject!}
+                    laborItems={laborItems}
+                    onUpdateLaborItem={async (item) => {
+                        await updateLaborItem(item);
+                        await loadProjectData();
+                    }}
+                    onUpdateProject={async (project) => {
+                        await updateProject(project);
+                        setSelectedProject(project);
+                        await loadInitialData();
+                    }}
+                    isPro={isPro}
+                    onUpgrade={() => setIsLicenseModalOpen(true)}
+                />
+            )}
         </div>
     );
     };

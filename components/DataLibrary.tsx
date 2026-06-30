@@ -6,6 +6,7 @@ import type { PredefinedLaborActivity, Project, Material, CustomMaterialActivity
 import Modal from './Modal';
 import { PlusIcon, TrashIcon, PencilIcon } from '../constants';
 import ManagedNumberInput from './ManagedNumberInput';
+import { getDefaultProductivity } from './ActivityScheduler';
 
 const Input = ({ label, hideLabel, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { label?: string, hideLabel?: boolean }) => (
     <div>
@@ -58,7 +59,7 @@ const DataLibraryLabor = ({
     onUpgrade: () => void 
 }) => {
     const [searchTerm, setSearchTerm] = React.useState('');
-    const [newActivity, setNewActivity] = React.useState({ name: '', unit: '', priceUSD: '', category: 'construction' });
+    const [newActivity, setNewActivity] = React.useState({ name: '', unit: '', priceUSD: '', productivity: '', category: 'construction' });
     const [activityToDeleteId, setActivityToDeleteId] = React.useState<number | null>(null);
     
     const laborCategories = React.useMemo(() => {
@@ -83,8 +84,15 @@ const DataLibraryLabor = ({
         onUpdate(updatedData);
     };
 
+    const handleProductivityChange = (id: number, newProd: string) => {
+        const updatedData = data.map(item =>
+            item.id === id ? { ...item, productivity: parseFloat(newProd) || 0 } : item
+        );
+        onUpdate(updatedData);
+    };
+
     const handleAddNewActivity = () => {
-        const { name, unit, priceUSD, category } = newActivity;
+        const { name, unit, priceUSD, productivity, category } = newActivity;
         if (!name || !unit || !priceUSD) {
             alert("Por favor complete todos los campos para la nueva actividad.");
             return;
@@ -96,10 +104,11 @@ const DataLibraryLabor = ({
             name,
             unit,
             priceUSD: parseFloat(priceUSD),
+            productivity: productivity ? parseFloat(productivity) : getDefaultProductivity(name, unit),
             category
         };
         onUpdate([...data, activityToAdd]);
-        setNewActivity({ name: '', unit: '', priceUSD: '', category: 'construction' }); // Reset form
+        setNewActivity({ name: '', unit: '', priceUSD: '', productivity: '', category: 'construction' }); // Reset form
     };
 
     const handleDeleteActivity = (id: number) => {
@@ -146,6 +155,7 @@ const DataLibraryLabor = ({
                         <tr>
                             <th className="px-4 py-2">Actividad</th>
                             <th className="px-4 py-2 w-24">Unidad</th>
+                            <th className="px-4 py-2 w-32">Rendimiento (U/Día)</th>
                             <th className="px-4 py-2 w-32">Precio Base (USD)</th>
                             <th className="px-4 py-2 w-36">Precio con Factor (USD)</th>
                             <th className="px-4 py-2 w-16 text-center">Acciones</th>
@@ -156,6 +166,17 @@ const DataLibraryLabor = ({
                             <tr key={item.id} className="hover:bg-slate-50">
                                 <td className="px-4 py-2 font-medium text-slate-900">{item.name}</td>
                                 <td className="px-4 py-2 text-slate-900">{item.unit}</td>
+                                <td className="px-4 py-2" onClick={!isPro ? onUpgrade : undefined} title={!isPro ? 'Función Pro: Edite rendimiento de mano de obra' : ''}>
+                                    <ManagedNumberInput
+                                        type="number"
+                                        hideLabel
+                                        value={item.productivity != null ? item.productivity : getDefaultProductivity(item.name, item.unit)}
+                                        onCommit={newProd => handleProductivityChange(item.id, newProd)}
+                                        step="0.1"
+                                        disabled={!isPro}
+                                        className="w-full px-2 py-1 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-cyan-500 text-slate-900 disabled:bg-slate-100 disabled:cursor-not-allowed text-right font-medium"
+                                    />
+                                </td>
                                 <td className="px-4 py-2" onClick={!isPro ? onUpgrade : undefined} title={!isPro ? 'Función Pro: Edite precios de mano de obra' : ''}>
                                     <ManagedNumberInput
                                         type="number"
@@ -187,6 +208,9 @@ const DataLibraryLabor = ({
                                 <Input hideLabel placeholder="Unidad" value={newActivity.unit} onChange={e => setNewActivity(p => ({ ...p, unit: e.target.value }))} disabled={!isPro}/>
                             </td>
                             <td className="px-4 py-2">
+                                <Input hideLabel type="number" placeholder="Rendimiento" value={newActivity.productivity} onChange={e => setNewActivity(p => ({ ...p, productivity: e.target.value }))} disabled={!isPro}/>
+                            </td>
+                            <td className="px-4 py-2">
                                 <Input hideLabel type="number" placeholder="Precio Base" value={newActivity.priceUSD} onChange={e => setNewActivity(p => ({ ...p, priceUSD: e.target.value }))} disabled={!isPro}/>
                             </td>
                             <td className="px-4 py-2 text-right font-semibold text-cyan-600 bg-cyan-50/20">
@@ -199,7 +223,7 @@ const DataLibraryLabor = ({
                             </td>
                         </tr>
                         <tr>
-                            <td colSpan={5} className="px-4 pb-2">
+                            <td colSpan={6} className="px-4 pb-2">
                                 <Select value={newActivity.category} onChange={e => setNewActivity(p => ({...p, category: e.target.value}))} disabled={!isPro}>
                                      {laborCategories.map(cat => <option key={cat} value={cat}>{categoryDisplayNames[cat] || cat}</option>)}
                                 </Select>

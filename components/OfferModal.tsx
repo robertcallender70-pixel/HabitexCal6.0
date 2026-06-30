@@ -3,6 +3,7 @@ import React from 'react';
 import Modal from './Modal';
 import type { Project, OfferData, LaborItem, Material, BudgetItem } from '../types';
 import { exportOfferFixedPriceToPDF, exportOfferDetailedToPDF } from '../services/pdf';
+import { calculateSchedule } from '../services/schedule';
 
 const Input = (props: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) => (
     <div>
@@ -46,6 +47,10 @@ const OfferModal: React.FC<OfferModalProps> = ({ isOpen, onClose, project, total
     });
     const [signerName, setSignerName] = React.useState('');
     const [signerTitle, setSignerTitle] = React.useState('');
+
+    const scheduleMetrics = React.useMemo(() => {
+        return calculateSchedule(laborItems, project?.startDate);
+    }, [laborItems, project?.startDate]);
 
     React.useEffect(() => {
         if (isOpen) {
@@ -101,6 +106,7 @@ const OfferModal: React.FC<OfferModalProps> = ({ isOpen, onClose, project, total
             laborItems,
             materials,
             budgetItems,
+            scheduleMetrics,
         };
 
         if (offerType === 'fixed') {
@@ -163,7 +169,29 @@ const OfferModal: React.FC<OfferModalProps> = ({ isOpen, onClose, project, total
                 </div>
 
                 <div>
-                    <h3 className="text-lg font-semibold text-slate-700 border-b pb-2 mb-4">4. Resumen del Costo Total</h3>
+                    <h3 className="text-lg font-semibold text-slate-700 border-b pb-2 mb-4">4. Datos de Trabajadores y Tiempo de Obra</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg text-sm border border-slate-250">
+                        <div>
+                            <span className="block font-semibold text-slate-600 mb-1">Duración Total de la Obra:</span>
+                            <span className="text-slate-800 font-bold text-base">{scheduleMetrics.totalDurationDays} días</span>
+                        </div>
+                        <div>
+                            <span className="block font-semibold text-slate-600 mb-1">Tiempo de Obra Restante (Faltante):</span>
+                            <span className="text-cyan-700 font-bold text-base">{scheduleMetrics.remainingDurationDays} días</span>
+                        </div>
+                        <div className="mt-2 md:mt-0">
+                            <span className="block font-semibold text-slate-600 mb-1">Trabajadores Promedio (Cuadrilla):</span>
+                            <span className="text-slate-800 font-bold text-base">{scheduleMetrics.avgWorkers} {scheduleMetrics.avgWorkers === 1 ? 'obrero' : 'obreros'}</span>
+                        </div>
+                        <div className="mt-2 md:mt-0">
+                            <span className="block font-semibold text-slate-600 mb-1">Personal Máximo Simultáneo (Pico):</span>
+                            <span className="text-slate-800 font-bold text-base">{scheduleMetrics.maxWorkers} {scheduleMetrics.maxWorkers === 1 ? 'obrero' : 'obreros'}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 className="text-lg font-semibold text-slate-700 border-b pb-2 mb-4">5. Resumen del Costo Total</h3>
                     <div className="bg-slate-50 p-4 rounded-lg text-base">
                         <div className="flex justify-between font-bold">
                             <span className="text-slate-800">Costo Total del Proyecto (MN):</span>

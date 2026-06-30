@@ -3,6 +3,7 @@ import React from 'react';
 import Modal from './Modal';
 import type { LaborItem, PredefinedLaborActivity, ActivityType } from '../types';
 import { getDataLibrary } from '../services/database';
+import { getDefaultProductivity } from './ActivityScheduler';
 
 
 const Input = (props: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) => (
@@ -38,6 +39,7 @@ export const AddLaborItemModal: React.FC<AddLaborItemModalProps> = ({ isOpen, on
         ? (currency === 'CUP' ? initialData.unitPrice * exchangeRate : initialData.unitPrice)
         : '';
     const [customPrice, setCustomPrice] = React.useState<string>(initialPrice.toString());
+    const [customProductivity, setCustomProductivity] = React.useState<string>(initialData?.scheduleProductivity?.toString() || '');
     
     const [laborLibrary, setLaborLibrary] = React.useState<PredefinedLaborActivity[]>([]);
 
@@ -97,6 +99,7 @@ export const AddLaborItemModal: React.FC<AddLaborItemModalProps> = ({ isOpen, on
             ? (currency === 'CUP' ? initialData.unitPrice * exchangeRate : initialData.unitPrice)
             : '';
         setCustomPrice(price.toString());
+        setCustomProductivity(initialData?.scheduleProductivity?.toString() || '');
     };
     
     React.useEffect(() => {
@@ -121,13 +124,26 @@ export const AddLaborItemModal: React.FC<AddLaborItemModalProps> = ({ isOpen, on
 
         if (mode === 'library' && selectedActivity) {
             const price = getPriceToSave(selectedActivity);
+            const defaultProd = selectedActivity.productivity ?? getDefaultProductivity(selectedActivity.name, selectedActivity.unit);
             if (selectedActivity.materialActivityType && !initialData) {
                 setShowConfirmation(true);
             } else {
-                onSave({ name: selectedActivity.name, unit: selectedActivity.unit, unitPrice: price, quantity: numQuantity });
+                onSave({ 
+                    name: selectedActivity.name, 
+                    unit: selectedActivity.unit, 
+                    unitPrice: price, 
+                    quantity: numQuantity,
+                    scheduleProductivity: defaultProd
+                });
             }
         } else if (mode === 'custom' && customName && customUnit && parseFloat(customPrice) >= 0) {
-            onSave({ name: customName, unit: customUnit, unitPrice: parseFloat(customPrice), quantity: numQuantity });
+            onSave({ 
+                name: customName, 
+                unit: customUnit, 
+                unitPrice: parseFloat(customPrice), 
+                quantity: numQuantity,
+                scheduleProductivity: customProductivity ? parseFloat(customProductivity) : getDefaultProductivity(customName, customUnit)
+            });
         } else {
             alert("Por favor, complete todos los campos requeridos con valores válidos.");
         }
@@ -137,7 +153,14 @@ export const AddLaborItemModal: React.FC<AddLaborItemModalProps> = ({ isOpen, on
         const numQuantity = parseFloat(quantity);
         if (selectedActivity && selectedActivity.materialActivityType && numQuantity > 0) {
             const price = getPriceToSave(selectedActivity);
-            const laborItem = { name: selectedActivity.name, unit: selectedActivity.unit, unitPrice: price, quantity: numQuantity };
+            const defaultProd = selectedActivity.productivity ?? getDefaultProductivity(selectedActivity.name, selectedActivity.unit);
+            const laborItem = { 
+                name: selectedActivity.name, 
+                unit: selectedActivity.unit, 
+                unitPrice: price, 
+                quantity: numQuantity,
+                scheduleProductivity: defaultProd
+            };
             onSaveAndAddMaterials(laborItem, selectedActivity.materialActivityType);
         }
     };
@@ -146,7 +169,14 @@ export const AddLaborItemModal: React.FC<AddLaborItemModalProps> = ({ isOpen, on
         const numQuantity = parseFloat(quantity);
         if (selectedActivity && numQuantity > 0) {
             const price = getPriceToSave(selectedActivity);
-            onSave({ name: selectedActivity.name, unit: selectedActivity.unit, unitPrice: price, quantity: numQuantity });
+            const defaultProd = selectedActivity.productivity ?? getDefaultProductivity(selectedActivity.name, selectedActivity.unit);
+            onSave({ 
+                name: selectedActivity.name, 
+                unit: selectedActivity.unit, 
+                unitPrice: price, 
+                quantity: numQuantity,
+                scheduleProductivity: defaultProd
+            });
         }
     };
 
@@ -229,7 +259,8 @@ export const AddLaborItemModal: React.FC<AddLaborItemModalProps> = ({ isOpen, on
                     <div className="col-span-2"><Input label="Nombre de Actividad" type="text" value={customName} onChange={e => setCustomName(e.target.value)} /></div>
                     <Input label="Unidad" type="text" value={customUnit} onChange={e => setCustomUnit(e.target.value)} />
                     <Input label={`Precio Unitario (${currency})`} type="number" value={customPrice} onChange={e => setCustomPrice(e.target.value)} />
-                    <div className="col-span-2"><Input label="Cantidad" type="number" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="0.00" /></div>
+                    <Input label="Rendimiento Obrero/Día (Opcional)" type="number" value={customProductivity} onChange={e => setCustomProductivity(e.target.value)} placeholder="Ej: 8.00" />
+                    <Input label="Cantidad" type="number" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="0.00" />
                 </div>
             )}
             
