@@ -29,8 +29,9 @@ export const calculateCertificationSnapshot = (
 
     const logisticsCost = completedLaborCost * ((project.logisticsPercentage || 0) / 100);
     const technicalAssistanceCost = completedLaborCost * ((project.technicalAssistancePercentage || 0) / 100);
+    const toolsAndUtilitiesCost = completedLaborCost * ((project.toolsAndUtilitiesPercentage || 0) / 100);
     
-    const subtotalBeforeProfit = completedLaborCost + materialExpenseCost + transportExpenseCost + manualExpenseCost + logisticsCost + technicalAssistanceCost;
+    const subtotalBeforeProfit = completedLaborCost + materialExpenseCost + transportExpenseCost + manualExpenseCost + logisticsCost + technicalAssistanceCost + toolsAndUtilitiesCost;
     const profitCost = subtotalBeforeProfit * ((project.profitPercentage || 0) / 100);
     
     const subtotalBeforeTax = subtotalBeforeProfit + profitCost;
@@ -89,11 +90,13 @@ export const calculateCertificationSnapshot = (
         manualExpenseCost,
         logisticsPercentage: project.logisticsPercentage || 0,
         technicalAssistancePercentage: project.technicalAssistancePercentage || 0,
+        toolsAndUtilitiesPercentage: project.toolsAndUtilitiesPercentage || 0,
         profitPercentage: project.profitPercentage || 0,
         transportPercentage: project.transportPercentage || 0,
         contingencyPercentage: project.contingencyPercentage || 0,
         logisticsCost,
         technicalAssistanceCost,
+        toolsAndUtilitiesCost,
         profitCost,
         hasServiceTax: project.hasServiceTax,
         serviceTaxPercentage: project.serviceTaxPercentage,
@@ -124,6 +127,7 @@ export const calculateConsolidatedCertificationSnapshot = async (
     let consolidatedManualExpenseCost = 0;
     let consolidatedLogisticsCost = 0;
     let consolidatedTechnicalAssistanceCost = 0;
+    let consolidatedToolsAndUtilitiesCost = 0;
     let consolidatedProfitCost = 0;
     let consolidatedGrandTotal = 0;
     let consolidatedServiceTaxCost = 0;
@@ -164,6 +168,7 @@ export const calculateConsolidatedCertificationSnapshot = async (
         consolidatedManualExpenseCost += childSnapshot.manualExpenseCost;
         consolidatedLogisticsCost += childSnapshot.logisticsCost;
         consolidatedTechnicalAssistanceCost += childSnapshot.technicalAssistanceCost;
+        consolidatedToolsAndUtilitiesCost += childSnapshot.toolsAndUtilitiesCost || 0;
         consolidatedProfitCost += childSnapshot.profitCost;
         consolidatedServiceTaxCost += childSnapshot.serviceTaxCost || 0;
         consolidatedGrandTotal += childSnapshot.grandTotal;
@@ -200,9 +205,11 @@ export const calculateConsolidatedCertificationSnapshot = async (
         manualExpenseCost: consolidatedManualExpenseCost,
         logisticsPercentage: 0,
         technicalAssistancePercentage: 0,
+        toolsAndUtilitiesPercentage: 0,
         profitPercentage: 0,
         logisticsCost: consolidatedLogisticsCost,
         technicalAssistanceCost: consolidatedTechnicalAssistanceCost,
+        toolsAndUtilitiesCost: consolidatedToolsAndUtilitiesCost,
         profitCost: consolidatedProfitCost,
         serviceTaxCost: consolidatedServiceTaxCost,
         grandTotal: consolidatedGrandTotal,

@@ -1,7 +1,7 @@
 
 import React from 'react';
 
-const ManagedNumberInput = ({ value: propValue, onCommit, type = 'number', ...props }: { value: number | string | undefined, onCommit: (value: string) => void, type?: string, [key:string]: any }) => {
+const ManagedNumberInput = ({ value: propValue, onCommit, type = 'number', hideLabel, ...props }: { value: number | string | undefined, onCommit: (value: string) => void, type?: string, hideLabel?: boolean, [key:string]: any }) => {
     const [localValue, setLocalValue] = React.useState(propValue != null ? String(propValue) : '');
     const inputRef = React.useRef<HTMLInputElement>(null);
 

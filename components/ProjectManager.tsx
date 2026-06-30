@@ -170,6 +170,7 @@ export const ProjectManager: React.FC = () => {
 
     const [isDeleteModalOpen, setIsDeleteModalOpen] = React.useState(false);
     const [itemToDelete, setItemToDelete] = React.useState<{ type: 'project' | 'activity' | 'labor' | 'budget' | 'transaction' | 'inventory' | 'certification'; id: number } | null>(null);
+    const [deleteAssociatedData, setDeleteAssociatedData] = React.useState(true);
 
     const [isImportConfirmModalOpen, setIsImportConfirmModalOpen] = React.useState(false);
     const [dataToImport, setDataToImport] = React.useState<any>(null);
@@ -422,9 +423,10 @@ export const ProjectManager: React.FC = () => {
             
             const logisticsCost = laborTotal * ((project.logisticsPercentage ?? 0) / 100);
             const techAssistCost = laborTotal * ((project.technicalAssistancePercentage ?? 0) / 100);
+            const toolsAndUtilitiesCost = laborTotal * ((project.toolsAndUtilitiesPercentage ?? 0) / 100);
             const transportCost = materialTotal * ((project.transportPercentage ?? 0) / 100);
             const contingencyCost = (materialTotal + laborTotal + budgetTotal) * ((project.contingencyPercentage ?? 0) / 100);
-            const subtotal = materialTotal + laborTotal + budgetTotal + logisticsCost + techAssistCost + transportCost + contingencyCost;
+            const subtotal = materialTotal + laborTotal + budgetTotal + logisticsCost + techAssistCost + transportCost + contingencyCost + toolsAndUtilitiesCost;
             const profitCost = subtotal * ((project.profitPercentage ?? 0) / 100);
 
             let usdCost = subtotal + profitCost;
@@ -483,6 +485,7 @@ export const ProjectManager: React.FC = () => {
             const defaults = libraryData?.indirect_expenses_defaults || {
                 logisticsPercentage: 5,
                 technicalAssistancePercentage: 5,
+                toolsAndUtilitiesPercentage: 3,
                 transportPercentage: 5,
                 contingencyPercentage: 5,
                 profitPercentage: 15,
@@ -494,6 +497,7 @@ export const ProjectManager: React.FC = () => {
                 exchangeRate: 380,
                 logisticsPercentage: defaults.logisticsPercentage,
                 technicalAssistancePercentage: defaults.technicalAssistancePercentage,
+                toolsAndUtilitiesPercentage: defaults.toolsAndUtilitiesPercentage,
                 transportPercentage: defaults.transportPercentage,
                 contingencyPercentage: defaults.contingencyPercentage,
                 profitPercentage: defaults.profitPercentage,
@@ -819,6 +823,7 @@ export const ProjectManager: React.FC = () => {
         }
 
         setItemToDelete({ type, id });
+        setDeleteAssociatedData(true);
         setIsDeleteModalOpen(true);
     };
 
@@ -836,7 +841,7 @@ export const ProjectManager: React.FC = () => {
                 closeModals();
                 return;
             }
-            await deleteProject(itemToDelete.id);
+            await deleteProject(itemToDelete.id, deleteAssociatedData);
             await loadInitialData();
             setSelectedProject(null);
         } else if (itemToDelete.type === 'activity') {
@@ -1107,8 +1112,8 @@ export const ProjectManager: React.FC = () => {
     const automaticBudgetItems = React.useMemo(() => {
         if (!selectedProject) return { items: [], total: { usd: 0, cup: 0 }, tax: { usd: 0, cup: 0 } };
         
-        let logisticsUsd = 0, techAssistUsd = 0, transportUsd = 0, contingencyUsd = 0, profitUsd = 0, taxUsd = 0;
-        let logisticsCup = 0, techAssistCup = 0, transportCup = 0, contingencyCup = 0, profitCup = 0, taxCup = 0;
+        let logisticsUsd = 0, techAssistUsd = 0, toolsAndUtilitiesUsd = 0, transportUsd = 0, contingencyUsd = 0, profitUsd = 0, taxUsd = 0;
+        let logisticsCup = 0, techAssistCup = 0, toolsAndUtilitiesCup = 0, transportCup = 0, contingencyCup = 0, profitCup = 0, taxCup = 0;
         
         const projectsToConsider = isParent ? projects.filter(p => p.parentId === selectedProject.id) : [selectedProject];
 
@@ -1126,10 +1131,11 @@ export const ProjectManager: React.FC = () => {
 
             const projLogistics = projLabor * ((proj.logisticsPercentage ?? 0) / 100);
             const projTechAssist = projLabor * ((proj.technicalAssistancePercentage ?? 0) / 100);
+            const projToolsAndUtilities = projLabor * ((proj.toolsAndUtilitiesPercentage ?? 0) / 100);
             const projTransport = projMaterial * ((proj.transportPercentage ?? 0) / 100);
             const projContingency = (projMaterial + projLabor + projManualBudget) * ((proj.contingencyPercentage ?? 0) / 100);
             
-            const subtotal = projMaterial + projLabor + projManualBudget + projLogistics + projTechAssist + projTransport + projContingency;
+            const subtotal = projMaterial + projLabor + projManualBudget + projLogistics + projTechAssist + projToolsAndUtilities + projTransport + projContingency;
             const projProfit = subtotal * ((proj.profitPercentage ?? 0) / 100);
             const totalBeforeTax = subtotal + projProfit;
 
@@ -1142,6 +1148,7 @@ export const ProjectManager: React.FC = () => {
             
             logisticsUsd += projLogistics;
             techAssistUsd += projTechAssist;
+            toolsAndUtilitiesUsd += projToolsAndUtilities;
             transportUsd += projTransport;
             contingencyUsd += projContingency;
             profitUsd += projProfit;
@@ -1149,6 +1156,7 @@ export const ProjectManager: React.FC = () => {
 
             logisticsCup += projLogistics * projRate;
             techAssistCup += projTechAssist * projRate;
+            toolsAndUtilitiesCup += projToolsAndUtilities * projRate;
             transportCup += projTransport * projRate;
             contingencyCup += projContingency * projRate;
             profitCup += projProfit * projRate;
@@ -1158,14 +1166,15 @@ export const ProjectManager: React.FC = () => {
         const items = [
             { name: 'Logística', usd: logisticsUsd, cup: logisticsCup },
             { name: 'Asistencia Técnica', usd: techAssistUsd, cup: techAssistCup },
+            { name: 'Gastos de Útiles y Herramientas', usd: toolsAndUtilitiesUsd, cup: toolsAndUtilitiesCup },
             { name: 'Transportación', usd: transportUsd, cup: transportCup },
             { name: 'Imprevistos', usd: contingencyUsd, cup: contingencyCup },
             { name: 'Utilidad', usd: profitUsd, cup: profitCup },
         ];
         
         const total = {
-            usd: logisticsUsd + techAssistUsd + transportUsd + contingencyUsd + profitUsd,
-            cup: logisticsCup + techAssistCup + transportCup + contingencyCup + profitCup
+            usd: logisticsUsd + techAssistUsd + toolsAndUtilitiesUsd + transportUsd + contingencyUsd + profitUsd,
+            cup: logisticsCup + techAssistCup + toolsAndUtilitiesCup + transportCup + contingencyCup + profitCup
         };
 
         const tax = {
@@ -1275,7 +1284,7 @@ export const ProjectManager: React.FC = () => {
                     costs.labor += snap.completedLaborCost * rate;
                     costs.transportation += snap.transportExpenseCost * rate;
                     costs.manual += snap.manualExpenseCost * rate;
-                    costs.indirect += (snap.logisticsCost + snap.technicalAssistanceCost + snap.profitCost + (snap.serviceTaxCost || 0)) * rate;
+                    costs.indirect += (snap.logisticsCost + snap.technicalAssistanceCost + (snap.toolsAndUtilitiesCost || 0) + snap.profitCost + (snap.serviceTaxCost || 0)) * rate;
                 } else {
                     // Fallback to transactions for this child if no certifications
                     transactions
@@ -1300,7 +1309,7 @@ export const ProjectManager: React.FC = () => {
                 costs.labor = snap.completedLaborCost * rate;
                 costs.transportation = snap.transportExpenseCost * rate;
                 costs.manual = snap.manualExpenseCost * rate;
-                costs.indirect = (snap.logisticsCost + snap.technicalAssistanceCost + snap.profitCost + (snap.serviceTaxCost || 0)) * rate;
+                costs.indirect = (snap.logisticsCost + snap.technicalAssistanceCost + (snap.toolsAndUtilitiesCost || 0) + snap.profitCost + (snap.serviceTaxCost || 0)) * rate;
             } else {
                 transactions
                     .filter(t => t.type === TransactionType.EXPENSE)
@@ -1581,6 +1590,10 @@ export const ProjectManager: React.FC = () => {
 
         const numValue = parseFloat(value);
         
+        if (field === 'toolsAndUtilitiesPercentage' && numValue > 5) {
+            alert('¡Alerta! El porcentaje de Gastos de Útiles y Herramientas no debe superar el 5%.');
+        }
+
         setSelectedProject(prev => prev ? ({
             ...prev,
             [field]: value === '' || isNaN(numValue) ? undefined : numValue,
@@ -2398,6 +2411,7 @@ export const ProjectManager: React.FC = () => {
             let usdVal = 0;
             if (name === 'Logística') usdVal = lastCertSnapshot.logisticsCost;
             else if (name === 'Asistencia Técnica') usdVal = lastCertSnapshot.technicalAssistanceCost;
+            else if (name === 'Gastos de Útiles y Herramientas') usdVal = lastCertSnapshot.toolsAndUtilitiesCost || 0;
             else if (name === 'Transportación') usdVal = lastCertSnapshot.transportExpenseCost; 
             else if (name === 'Utilidad') usdVal = lastCertSnapshot.profitCost;
             else if (name === 'Imprevistos') usdVal = 0; 
@@ -2446,9 +2460,10 @@ export const ProjectManager: React.FC = () => {
                         <span>Configuración de Gastos Indirectos</span>
                         <ChevronDownIcon className={`h-6 w-6 transform transition-transform ${isIndirectConfigOpen ? 'rotate-180' : ''}`} />
                     </summary>
-                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
                         <PercentageInput label="Logística (%)" field="logisticsPercentage" value={selectedProject?.logisticsPercentage} onChange={handlePercentageChange} />
                         <PercentageInput label="Asistencia Técnica (%)" field="technicalAssistancePercentage" value={selectedProject?.technicalAssistancePercentage} onChange={handlePercentageChange} />
+                        <PercentageInput label="Útiles y Herramientas (%)" field="toolsAndUtilitiesPercentage" value={selectedProject?.toolsAndUtilitiesPercentage} onChange={handlePercentageChange} />
                         <PercentageInput label="Transportación (%)" field="transportPercentage" value={selectedProject?.transportPercentage} onChange={handlePercentageChange} />
                         <PercentageInput label="Imprevistos (%)" field="contingencyPercentage" value={selectedProject?.contingencyPercentage} onChange={handlePercentageChange} />
                         <PercentageInput label="Utilidad (%)" field="profitPercentage" value={selectedProject?.profitPercentage} onChange={handlePercentageChange} />
@@ -3703,8 +3718,45 @@ export const ProjectManager: React.FC = () => {
             >
                 <div className="space-y-4">
                     <p className="text-slate-600">
-                        ¿Está seguro de que desea eliminar este elemento? Esta acción se puede deshacer.
+                        {itemToDelete?.type === 'project' 
+                            ? '¿Está seguro de que desea eliminar esta obra principal? Seleccione una de las siguientes opciones:' 
+                            : '¿Está seguro de que desea eliminar este elemento? Esta acción no se puede deshacer.'}
                     </p>
+
+                    {itemToDelete?.type === 'project' && (
+                        <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3">
+                            <label className="block text-sm font-semibold text-slate-700">Opciones de eliminación:</label>
+                            <div className="space-y-3">
+                                <label className="flex items-start gap-3 cursor-pointer text-sm text-slate-700">
+                                    <input
+                                        type="radio"
+                                        name="deleteOption"
+                                        checked={deleteAssociatedData}
+                                        onChange={() => setDeleteAssociatedData(true)}
+                                        className="mt-1 h-4 w-4 text-red-600 border-slate-300 focus:ring-red-500"
+                                    />
+                                    <div>
+                                        <span className="font-medium text-slate-900 block">Borrar obra y todos sus objetos de obra</span>
+                                        <span className="text-xs text-slate-500">Elimina de forma permanente la obra junto con todas las actividades, mano de obra, presupuestos, transacciones, inventario y certificaciones asociadas.</span>
+                                    </div>
+                                </label>
+                                <label className="flex items-start gap-3 cursor-pointer text-sm text-slate-700">
+                                    <input
+                                        type="radio"
+                                        name="deleteOption"
+                                        checked={!deleteAssociatedData}
+                                        onChange={() => setDeleteAssociatedData(false)}
+                                        className="mt-1 h-4 w-4 text-red-600 border-slate-300 focus:ring-red-500"
+                                    />
+                                    <div>
+                                        <span className="font-medium text-slate-900 block">Borrar solo la obra principal</span>
+                                        <span className="text-xs text-slate-500">Elimina únicamente la obra, conservando intactos en la base de datos todos los objetos de obra asociados.</span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="flex justify-end gap-3">
                         <button
                             onClick={() => setIsDeleteModalOpen(false)}

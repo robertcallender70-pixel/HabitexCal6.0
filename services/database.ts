@@ -173,6 +173,7 @@ export const initDataLibrary = async () => {
                 store.put({ id: 'indirect_expenses_defaults', data: {
                     logisticsPercentage: 5,
                     technicalAssistancePercentage: 5,
+                    toolsAndUtilitiesPercentage: 3,
                     transportPercentage: 5,
                     contingencyPercentage: 5,
                     profitPercentage: 15,
@@ -211,6 +212,7 @@ export const initDataLibrary = async () => {
                 await store.put({ id: 'indirect_expenses_defaults', data: {
                     logisticsPercentage: 5,
                     technicalAssistancePercentage: 5,
+                    toolsAndUtilitiesPercentage: 3,
                     transportPercentage: 5,
                     contingencyPercentage: 5,
                     profitPercentage: 15,
@@ -310,50 +312,71 @@ export const updateProject = async (project: Project) => {
     return db.put(PROJECTS_STORE, project);
 }
 
-export const deleteProject = async (id: number) => {
+export const deleteProject = async (id: number, deleteChildrenAndData: boolean = true) => {
     const db = await initDB();
     const tx = db.transaction(ALL_STORES, 'readwrite');
     
-    // Make child projects independent before deleting the parent
     const projectStore = tx.objectStore(PROJECTS_STORE);
+    const activityStore = tx.objectStore(ACTIVITIES_STORE);
+    const laborStore = tx.objectStore(LABOR_ITEMS_STORE);
+    const budgetStore = tx.objectStore(BUDGET_ITEMS_STORE);
+    const transactionStore = tx.objectStore(TRANSACTIONS_STORE);
+    const inventoryStore = tx.objectStore(INVENTORY_ITEMS_STORE);
+    const certificationStore = tx.objectStore(CERTIFICATIONS_STORE);
+
     const allProjects: Project[] = await projectStore.getAll();
     const children = allProjects.filter(p => p.parentId === id);
 
+    const deleteProjectData = async (projId: number) => {
+        // Delete activities
+        const projectActivities = await activityStore.index('projectId').getAll(projId);
+        await Promise.all(projectActivities.map((act: Activity) => activityStore.delete(act.id)));
+        
+        // Delete labor items
+        const projectLaborItems = await laborStore.index('projectId').getAll(projId);
+        await Promise.all(projectLaborItems.map((item: LaborItem) => laborStore.delete(item.id)));
+        
+        // Delete budget items
+        const projectBudgetItems = await budgetStore.index('projectId').getAll(projId);
+        await Promise.all(projectBudgetItems.map((item: BudgetItem) => budgetStore.delete(item.id)));
+
+        // Delete transactions
+        const projectTransactions = await transactionStore.index('projectId').getAll(projId);
+        await Promise.all(projectTransactions.map((item: Transaction) => transactionStore.delete(item.id)));
+        
+        // Delete inventory
+        const projectInventoryItems = await inventoryStore.index('projectId').getAll(projId);
+        await Promise.all(projectInventoryItems.map((item: InventoryItem) => inventoryStore.delete(item.id)));
+        
+        // Delete certifications
+        const projectCertifications = await certificationStore.index('projectId').getAll(projId);
+        await Promise.all(projectCertifications.map((item: Certification) => certificationStore.delete(item.id)));
+
+        // Delete the project itself
+        await projectStore.delete(projId);
+    };
+
     if (children.length > 0) {
-        await Promise.all(children.map(child => {
-            const updatedChild = { ...child };
-            delete updatedChild.parentId;
-            return projectStore.put(updatedChild);
-        }));
+        if (deleteChildrenAndData) {
+            // Delete all children projects and their associated data
+            for (const child of children) {
+                if (child.id) {
+                    await deleteProjectData(child.id);
+                }
+            }
+        } else {
+            // Make children independent (keep them and their data)
+            for (const child of children) {
+                const updatedChild = { ...child };
+                delete updatedChild.parentId;
+                await projectStore.put(updatedChild);
+            }
+        }
     }
 
-    // Delete associated data for the project being deleted
-    const activityStore = tx.objectStore(ACTIVITIES_STORE);
-    const projectActivities = await activityStore.index('projectId').getAll(id);
-    await Promise.all(projectActivities.map((act: Activity) => activityStore.delete(act.id)));
-    
-    const laborStore = tx.objectStore(LABOR_ITEMS_STORE);
-    const projectLaborItems = await laborStore.index('projectId').getAll(id);
-    await Promise.all(projectLaborItems.map((item: LaborItem) => laborStore.delete(item.id)));
-    
-    const budgetStore = tx.objectStore(BUDGET_ITEMS_STORE);
-    const projectBudgetItems = await budgetStore.index('projectId').getAll(id);
-    await Promise.all(projectBudgetItems.map((item: BudgetItem) => budgetStore.delete(item.id)));
+    // Finally, delete the parent project and its data
+    await deleteProjectData(id);
 
-    const transactionStore = tx.objectStore(TRANSACTIONS_STORE);
-    const projectTransactions = await transactionStore.index('projectId').getAll(id);
-    await Promise.all(projectTransactions.map((item: Transaction) => transactionStore.delete(item.id)));
-    
-    const inventoryStore = tx.objectStore(INVENTORY_ITEMS_STORE);
-    const projectInventoryItems = await inventoryStore.index('projectId').getAll(id);
-    await Promise.all(projectInventoryItems.map((item: InventoryItem) => inventoryStore.delete(item.id)));
-    
-    const certificationStore = tx.objectStore(CERTIFICATIONS_STORE);
-    const projectCertifications = await certificationStore.index('projectId').getAll(id);
-    await Promise.all(projectCertifications.map((item: Certification) => certificationStore.delete(item.id)));
-
-    // Finally, delete the project itself
-    await projectStore.delete(id);
     await tx.done;
 };
 

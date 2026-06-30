@@ -318,148 +318,148 @@ const DataLibraryMaterials = ({ materialsWithPrices, onPriceChange, onMaterialAd
 
 
 // --- Formulas Library Component ---
+const FormulaSection = ({ title, children }: { title: string, children?: React.ReactNode }) => (
+    <details className="p-4 border rounded-lg bg-white" open>
+        <summary className="font-semibold text-lg cursor-pointer text-slate-700">{title}</summary>
+        <div className="mt-4">{children}</div>
+    </details>
+);
+
+const GenericTableEditor = ({ libraryKey, sectionData, columns, onUpdate, canAdd, canDelete, defaultNewRow }: { 
+    libraryKey: string, 
+    sectionData: any[], 
+    columns: { key: keyof any, label: string, type?: string, editable: boolean }[], 
+    onUpdate: Function,
+    canAdd?: boolean,
+    canDelete?: boolean,
+    defaultNewRow?: any
+}) => {
+    const [rowToDeleteIndex, setRowToDeleteIndex] = React.useState<number | null>(null);
+
+    const handleCellChange = (rowIndex: number, key: keyof any, value: any) => {
+        const updatedData = [...sectionData];
+        updatedData[rowIndex] = { ...updatedData[rowIndex], [key]: value };
+        onUpdate(libraryKey, updatedData);
+    };
+
+    const handleDeleteRow = (rowIndex: number) => {
+        setRowToDeleteIndex(rowIndex);
+    };
+
+    const confirmDeleteRow = () => {
+        if (rowToDeleteIndex !== null) {
+            const updatedData = [...sectionData];
+            updatedData.splice(rowToDeleteIndex, 1);
+            onUpdate(libraryKey, updatedData);
+            setRowToDeleteIndex(null);
+        }
+    };
+
+    const handleAddRow = () => {
+        const newRow = { ...defaultNewRow };
+        if (libraryKey.startsWith('morteros')) {
+            newRow.id = `custom_${Date.now()}`;
+        }
+        const updatedData = [...(sectionData || []), newRow];
+        onUpdate(libraryKey, updatedData);
+    };
+
+    return (
+         <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+                <thead className="text-xs text-slate-600 uppercase bg-slate-100">
+                    <tr>
+                        {columns.map(col => <th key={String(col.key)} className="px-4 py-2 text-left">{col.label}</th>)}
+                        {canDelete && <th className="px-4 py-2 text-left w-20">Acciones</th>}
+                    </tr>
+                </thead>
+                <tbody className="divide-y">
+                    {(sectionData || []).map((row, rowIndex) => (
+                        <tr key={row.id || rowIndex} className="hover:bg-slate-50">
+                            {columns.map(col => (
+                                <td key={String(col.key)} className="px-2 py-1">
+                                    {col.editable ? (
+                                        <ManagedNumberInput
+                                            hideLabel
+                                            type={col.type || 'number'}
+                                            value={row[col.key]}
+                                            onCommit={value => handleCellChange(rowIndex, col.key, col.type === 'text' ? value : parseFloat(value) || 0)}
+                                            step="0.001"
+                                            className="w-full px-2 py-1 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-cyan-500 text-slate-900"
+                                        />
+                                    ) : (
+                                        <span className="text-slate-900 px-2">{row[col.key]}</span>
+                                    )}
+                                </td>
+                            ))}
+                            {canDelete && (
+                                <td className="px-2 py-1 text-center">
+                                    <button onClick={() => handleDeleteRow(rowIndex)} className="p-1 text-slate-400 hover:text-red-600">
+                                        <TrashIcon className="h-5 w-5" />
+                                    </button>
+                                </td>
+                            )}
+                        </tr>
+                    ))}
+                </tbody>
+                {canAdd && (
+                    <tfoot className="bg-slate-50">
+                        <tr>
+                            <td colSpan={columns.length + (canDelete ? 1 : 0)} className="p-2 text-center">
+                                <button onClick={handleAddRow} className="text-sm flex items-center gap-2 px-3 py-1.5 bg-slate-200 rounded-md hover:bg-slate-300 mx-auto">
+                                    <PlusIcon className="h-4 w-4" /> Añadir Nueva Fila
+                                </button>
+                            </td>
+                        </tr>
+                    </tfoot>
+                )}
+            </table>
+            {rowToDeleteIndex !== null && (
+                 <Modal
+                    isOpen={rowToDeleteIndex !== null}
+                    onClose={() => setRowToDeleteIndex(null)}
+                    title="Confirmar Eliminación de Fila"
+                    size="md"
+                >
+                    <p>¿Está seguro de que desea eliminar esta fila? Esta acción es permanente.</p>
+                    <div className="flex justify-end gap-4 mt-6">
+                        <button onClick={() => setRowToDeleteIndex(null)} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-md hover:bg-slate-300">Cancelar</button>
+                        <button onClick={confirmDeleteRow} className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">Eliminar</button>
+                    </div>
+                </Modal>
+            )}
+        </div>
+    );
+};
+
+const GenericObjectEditor = ({ libraryKey, data, onUpdate }: { libraryKey: string, data: Record<string, number>, onUpdate: Function }) => {
+    const handleCommit = (key: string, value: string) => {
+        const updatedData = { ...data, [key]: parseFloat(value) || 0 };
+        onUpdate(libraryKey, updatedData);
+    };
+    return (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {Object.entries(data || {}).map(([key, value]) => (
+                <div key={key}>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">{key.replace(/_/g, ' ')}</label>
+                    <ManagedNumberInput
+                        type="number"
+                        value={value}
+                        onCommit={(newValue) => handleCommit(key, newValue)}
+                        step="0.001"
+                        className="w-full px-2 py-1 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-cyan-500 text-slate-900"
+                    />
+                </div>
+            ))}
+        </div>
+    )
+};
+
 const DataLibraryFormulas = ({ data, onUpdate }: { data: Record<string, any>, onUpdate: (libraryKey: string, sectionData: any) => void }) => {
     const handleUpdate = (libraryKey: string, updatedSectionData: any) => {
         onUpdate(libraryKey, updatedSectionData);
     };
 
-    const FormulaSection = ({ title, children }: { title: string, children?: React.ReactNode }) => (
-        <details className="p-4 border rounded-lg bg-white" open>
-            <summary className="font-semibold text-lg cursor-pointer text-slate-700">{title}</summary>
-            <div className="mt-4">{children}</div>
-        </details>
-    );
-    
-    const GenericTableEditor = ({ libraryKey, sectionData, columns, onUpdate, canAdd, canDelete, defaultNewRow }: { 
-        libraryKey: string, 
-        sectionData: any[], 
-        columns: { key: keyof any, label: string, type?: string, editable: boolean }[], 
-        onUpdate: Function,
-        canAdd?: boolean,
-        canDelete?: boolean,
-        defaultNewRow?: any
-    }) => {
-        const [rowToDeleteIndex, setRowToDeleteIndex] = React.useState<number | null>(null);
-    
-        const handleCellChange = (rowIndex: number, key: keyof any, value: any) => {
-            const updatedData = [...sectionData];
-            updatedData[rowIndex] = { ...updatedData[rowIndex], [key]: value };
-            onUpdate(libraryKey, updatedData);
-        };
-    
-        const handleDeleteRow = (rowIndex: number) => {
-            setRowToDeleteIndex(rowIndex);
-        };
-    
-        const confirmDeleteRow = () => {
-            if (rowToDeleteIndex !== null) {
-                const updatedData = [...sectionData];
-                updatedData.splice(rowToDeleteIndex, 1);
-                onUpdate(libraryKey, updatedData);
-                setRowToDeleteIndex(null);
-            }
-        };
-    
-        const handleAddRow = () => {
-            const newRow = { ...defaultNewRow };
-            if (libraryKey.startsWith('morteros')) {
-                newRow.id = `custom_${Date.now()}`;
-            }
-            const updatedData = [...(sectionData || []), newRow];
-            onUpdate(libraryKey, updatedData);
-        };
-    
-        return (
-             <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                    <thead className="text-xs text-slate-600 uppercase bg-slate-100">
-                        <tr>
-                            {columns.map(col => <th key={String(col.key)} className="px-4 py-2 text-left">{col.label}</th>)}
-                            {canDelete && <th className="px-4 py-2 text-left w-20">Acciones</th>}
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                        {(sectionData || []).map((row, rowIndex) => (
-                            <tr key={row.id || rowIndex} className="hover:bg-slate-50">
-                                {columns.map(col => (
-                                    <td key={String(col.key)} className="px-2 py-1">
-                                        {col.editable ? (
-                                            <ManagedNumberInput
-                                                hideLabel
-                                                type={col.type || 'number'}
-                                                value={row[col.key]}
-                                                onCommit={value => handleCellChange(rowIndex, col.key, col.type === 'text' ? value : parseFloat(value) || 0)}
-                                                step="0.001"
-                                                className="w-full px-2 py-1 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-cyan-500 text-slate-900"
-                                            />
-                                        ) : (
-                                            <span className="text-slate-900 px-2">{row[col.key]}</span>
-                                        )}
-                                    </td>
-                                ))}
-                                {canDelete && (
-                                    <td className="px-2 py-1 text-center">
-                                        <button onClick={() => handleDeleteRow(rowIndex)} className="p-1 text-slate-400 hover:text-red-600">
-                                            <TrashIcon className="h-5 w-5" />
-                                        </button>
-                                    </td>
-                                )}
-                            </tr>
-                        ))}
-                    </tbody>
-                    {canAdd && (
-                        <tfoot className="bg-slate-50">
-                            <tr>
-                                <td colSpan={columns.length + (canDelete ? 1 : 0)} className="p-2 text-center">
-                                    <button onClick={handleAddRow} className="text-sm flex items-center gap-2 px-3 py-1.5 bg-slate-200 rounded-md hover:bg-slate-300 mx-auto">
-                                        <PlusIcon className="h-4 w-4" /> Añadir Nueva Fila
-                                    </button>
-                                </td>
-                            </tr>
-                        </tfoot>
-                    )}
-                </table>
-                {rowToDeleteIndex !== null && (
-                     <Modal
-                        isOpen={rowToDeleteIndex !== null}
-                        onClose={() => setRowToDeleteIndex(null)}
-                        title="Confirmar Eliminación de Fila"
-                        size="md"
-                    >
-                        <p>¿Está seguro de que desea eliminar esta fila? Esta acción es permanente.</p>
-                        <div className="flex justify-end gap-4 mt-6">
-                            <button onClick={() => setRowToDeleteIndex(null)} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-md hover:bg-slate-300">Cancelar</button>
-                            <button onClick={confirmDeleteRow} className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">Eliminar</button>
-                        </div>
-                    </Modal>
-                )}
-            </div>
-        );
-    };
-    
-    const GenericObjectEditor = ({ libraryKey, data, onUpdate }: { libraryKey: string, data: Record<string, number>, onUpdate: Function }) => {
-        const handleCommit = (key: string, value: string) => {
-            const updatedData = { ...data, [key]: parseFloat(value) || 0 };
-            onUpdate(libraryKey, updatedData);
-        };
-        return (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {Object.entries(data || {}).map(([key, value]) => (
-                    <div key={key}>
-                        <label className="block text-xs font-medium text-slate-600 mb-1">{key.replace(/_/g, ' ')}</label>
-                        <ManagedNumberInput
-                            type="number"
-                            value={value}
-                            onCommit={(newValue) => handleCommit(key, newValue)}
-                            step="0.001"
-                            className="w-full px-2 py-1 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-cyan-500 text-slate-900"
-                        />
-                    </div>
-                ))}
-            </div>
-        )
-    };
-    
     return (
         <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2 bg-slate-50 p-2 rounded-lg">
             <FormulaSection title="Dosificación de Hormigones">
@@ -560,12 +560,16 @@ const DataLibraryFormulas = ({ data, onUpdate }: { data: Record<string, any>, on
 const DataLibraryExpenses = ({ data, onUpdate }: { data: any, onUpdate: (data: any) => void }) => {
     const updateField = (field: string, value: string) => {
         const numValue = parseFloat(value) || 0;
+        if (field === 'toolsAndUtilitiesPercentage' && numValue > 5) {
+            alert('¡Alerta! El porcentaje de Gastos de Útiles y Herramientas no debe superar el 5%.');
+        }
         onUpdate({ ...data, [field]: numValue });
     };
 
     const fields = [
         { key: 'logisticsPercentage', label: 'Logística (%)' },
         { key: 'technicalAssistancePercentage', label: 'Asistencia Técnica (%)' },
+        { key: 'toolsAndUtilitiesPercentage', label: 'Gastos de Útiles y Herramientas (%)' },
         { key: 'transportPercentage', label: 'Transportación (%)' },
         { key: 'contingencyPercentage', label: 'Imprevistos (%)' },
         { key: 'profitPercentage', label: 'Utilidad (%)' },
@@ -598,96 +602,96 @@ const DataLibraryExpenses = ({ data, onUpdate }: { data: any, onUpdate: (data: a
     );
 };
 
+const LicenseStatus = ({ licenseData }: { licenseData: License }) => {
+    if (!licenseData) return null;
+
+    if (licenseData.status === 'pro' && licenseData.key) {
+        let expirationInfo = {
+            status: 'Error',
+            message: 'No se pudo leer la licencia.',
+            color: 'red'
+        };
+
+        try {
+            const payloadB64 = licenseData.key.split('.')[0];
+            const payloadStr = atob(payloadB64);
+            const payload = JSON.parse(payloadStr);
+
+            if (payload.expiresAt) {
+                const date = new Date(payload.expiresAt);
+                const now = new Date();
+                const diffTime = date.getTime() - now.getTime();
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                if (diffDays > 0) {
+                    expirationInfo = {
+                        status: `${diffDays} ${diffDays === 1 ? 'día restante' : 'días restantes'}`,
+                        message: `Válida hasta: ${date.toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' })}`,
+                        color: 'blue'
+                    };
+                } else {
+                    expirationInfo = {
+                        status: 'Licencia Expirada',
+                        message: `Expiró el: ${date.toLocaleDateString('es-ES')}`,
+                        color: 'red'
+                    };
+                }
+            } else {
+                expirationInfo = {
+                    status: 'Licencia Permanente',
+                    message: 'Válida de por vida en este dispositivo.',
+                    color: 'green'
+                };
+            }
+        } catch (e) {
+            console.error("Could not parse license key payload:", e);
+        }
+        
+        const colorClasses: Record<string, string> = {
+            blue: 'bg-blue-50 border-blue-200 text-blue-800',
+            green: 'bg-green-50 border-green-200 text-green-800',
+            red: 'bg-red-50 border-red-200 text-red-800',
+        };
+        const colorClass = colorClasses[expirationInfo.color] || 'bg-slate-50 border-slate-200';
+
+
+        return (
+            <div className={`p-4 rounded-lg border ${colorClass} mb-6`}>
+                <div className="flex items-start gap-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 20.944a11.955 11.955 0 0118 0 12.02 12.02 0 00-2.382-8.984z" /></svg>
+                    <div>
+                         <h4 className="font-bold text-lg leading-tight">Plan Pro Activo</h4>
+                         <p className="font-semibold text-xl mt-1">{expirationInfo.status}</p>
+                         <p className="text-xs mt-1">{expirationInfo.message}</p>
+                    </div>
+                </div>
+            </div>
+        );
+
+    } else {
+         return (
+            <div className="p-4 rounded-lg border bg-slate-50 border-slate-200 text-slate-700 mb-6">
+                <div className="flex items-center gap-3">
+                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    <div>
+                        <h4 className="font-bold text-lg">Plan Gratuito</h4>
+                        <p className="text-sm">Actualice a Pro para desbloquear todas las funciones.</p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+};
+
 const DataLibraryCompany = ({ companyData, licenseData, onUpdate }: { companyData: any, licenseData: License, onUpdate: (data: any) => void }) => {
     const handleCommit = (field: string, value: string) => {
         onUpdate({ ...companyData, [field]: value });
     };
 
-    const LicenseStatus = () => {
-        if (!licenseData) return null;
-
-        if (licenseData.status === 'pro' && licenseData.key) {
-            let expirationInfo = {
-                status: 'Error',
-                message: 'No se pudo leer la licencia.',
-                color: 'red'
-            };
-
-            try {
-                const payloadB64 = licenseData.key.split('.')[0];
-                const payloadStr = atob(payloadB64);
-                const payload = JSON.parse(payloadStr);
-
-                if (payload.expiresAt) {
-                    const date = new Date(payload.expiresAt);
-                    const now = new Date();
-                    const diffTime = date.getTime() - now.getTime();
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-                    if (diffDays > 0) {
-                        expirationInfo = {
-                            status: `${diffDays} ${diffDays === 1 ? 'día restante' : 'días restantes'}`,
-                            message: `Válida hasta: ${date.toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' })}`,
-                            color: 'blue'
-                        };
-                    } else {
-                        expirationInfo = {
-                            status: 'Licencia Expirada',
-                            message: `Expiró el: ${date.toLocaleDateString('es-ES')}`,
-                            color: 'red'
-                        };
-                    }
-                } else {
-                    expirationInfo = {
-                        status: 'Licencia Permanente',
-                        message: 'Válida de por vida en este dispositivo.',
-                        color: 'green'
-                    };
-                }
-            } catch (e) {
-                console.error("Could not parse license key payload:", e);
-            }
-            
-            const colorClasses: Record<string, string> = {
-                blue: 'bg-blue-50 border-blue-200 text-blue-800',
-                green: 'bg-green-50 border-green-200 text-green-800',
-                red: 'bg-red-50 border-red-200 text-red-800',
-            };
-            const colorClass = colorClasses[expirationInfo.color] || 'bg-slate-50 border-slate-200';
-
-
-            return (
-                <div className={`p-4 rounded-lg border ${colorClass} mb-6`}>
-                    <div className="flex items-start gap-3">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 20.944a11.955 11.955 0 0118 0 12.02 12.02 0 00-2.382-8.984z" /></svg>
-                        <div>
-                             <h4 className="font-bold text-lg leading-tight">Plan Pro Activo</h4>
-                             <p className="font-semibold text-xl mt-1">{expirationInfo.status}</p>
-                             <p className="text-xs mt-1">{expirationInfo.message}</p>
-                        </div>
-                    </div>
-                </div>
-            );
-
-        } else {
-             return (
-                <div className="p-4 rounded-lg border bg-slate-50 border-slate-200 text-slate-700 mb-6">
-                    <div className="flex items-center gap-3">
-                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                        <div>
-                            <h4 className="font-bold text-lg">Plan Gratuito</h4>
-                            <p className="text-sm">Actualice a Pro para desbloquear todas las funciones.</p>
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-    };
-
 
     return (
         <div className="space-y-4 p-2">
-            <LicenseStatus />
+            <LicenseStatus licenseData={licenseData} />
             <div className="bg-white p-4 rounded-lg border">
                 <h3 className="text-lg font-semibold text-slate-800">Información de la Empresa y Firmante</h3>
                 <p className="mt-1 text-sm text-slate-600">

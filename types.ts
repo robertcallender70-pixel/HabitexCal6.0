@@ -21,6 +21,7 @@ export interface Project {
     createdAt: Date;
     logisticsPercentage?: number;
     technicalAssistancePercentage?: number;
+    toolsAndUtilitiesPercentage?: number;
     transportPercentage?: number;
     contingencyPercentage?: number;
     profitPercentage?: number;
@@ -165,6 +166,7 @@ export interface CertificationSnapshot {
     // Project's percentage settings at the time of certification
     logisticsPercentage: number;
     technicalAssistancePercentage: number;
+    toolsAndUtilitiesPercentage?: number;
     profitPercentage: number;
     transportPercentage?: number;
     contingencyPercentage?: number;
@@ -172,6 +174,7 @@ export interface CertificationSnapshot {
     // Calculated costs based on the real costs and percentages
     logisticsCost: number; // Stored in USD
     technicalAssistanceCost: number; // Stored in USD
+    toolsAndUtilitiesCost?: number; // Stored in USD
     profitCost: number; // Stored in USD
     
     // Tax

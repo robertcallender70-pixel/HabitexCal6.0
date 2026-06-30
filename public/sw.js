@@ -1,11 +1,11 @@
 
 /**
  * Habitex Calcula Pro - Service Worker
- * Versión: 6.3
+ * Versión: 6.4
  * Funcionalidad offline completa y compatibilidad con PWABuilder
  */
 
-const CACHE_NAME = 'habitex-calcula-v6.3';
+const CACHE_NAME = 'habitex-calcula-v6.4';
 
 const URLS_TO_PRECACHE = [
     '/',
@@ -91,9 +91,17 @@ self.addEventListener('fetch', event => {
     if (!isSameOrigin && !isCDNDomain) return;
 
     // Estrategia de caché:
-    // Considerar navegación real o peticiones directas de root del mismo origen como navegación
+    // Considerar navegación real, peticiones directas de root del mismo origen, o archivos de código fuente local (.tsx, .ts, .js, .css) para Network-First
+    const isCodeFile = isSameOrigin && (
+        url.pathname.endsWith('.tsx') || 
+        url.pathname.endsWith('.ts') || 
+        url.pathname.endsWith('.js') || 
+        url.pathname.endsWith('.css') || 
+        url.pathname.endsWith('.json')
+    );
     const isNavigation = event.request.mode === 'navigate' || 
-                         (isSameOrigin && (url.pathname === '/' || url.pathname === '/index.html'));
+                         (isSameOrigin && (url.pathname === '/' || url.pathname === '/index.html')) ||
+                         isCodeFile;
 
     // Función auxiliar para determinar si la respuesta es válida para cachear.
     // Guardamos respuestas exitosas (status 200) y de orígenes cruzados opacos (status 0).
