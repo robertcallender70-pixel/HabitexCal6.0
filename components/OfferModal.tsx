@@ -112,6 +112,7 @@ const OfferModal: React.FC<OfferModalProps> = ({ isOpen, onClose, project, total
             materials,
             budgetItems,
             scheduleMetrics,
+            scheduleItems: scheduleMetrics.scheduleItems,
         };
 
         if (offerType === 'fixed') {

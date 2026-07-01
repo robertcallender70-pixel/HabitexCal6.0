@@ -69,6 +69,7 @@ export interface LaborItem {
     scheduleWorkers?: number;
     scheduleProductivity?: number;
     schedulePredecessorId?: number;
+    scheduleStartDate?: string; // Optional custom start date for root activities (YYYY-MM-DD)
 }
 
 export interface BudgetItem {
@@ -286,6 +287,18 @@ export interface OfferData {
         avgWorkers: number;
         maxWorkers: number;
     };
+    scheduleItems?: Record<number, {
+        id: number;
+        laborItem: LaborItem;
+        quantity: number;
+        unit: string;
+        workers: number;
+        productivity: number;
+        durationDays: number;
+        startDate: Date;
+        endDate: Date;
+        predecessorId?: number;
+    }>;
 }
 
 export type CustomActivityUnit = 'm' | 'm²' | 'm³' | 'unidad';

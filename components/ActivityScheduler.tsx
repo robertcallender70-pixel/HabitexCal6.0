@@ -67,8 +67,26 @@ export default function ActivityScheduler({
         return d.toISOString().slice(0, 10);
     });
 
-    const [scale, setScale] = React.useState<'days' | 'weeks'>('days');
+    const [scale, setScale] = React.useState<'days' | 'weeks' | 'months'>('days');
     const [editingItemId, setEditingItemId] = React.useState<number | null>(null);
+
+    const navigateTimeline = (direction: 'prev' | 'next') => {
+        const d = new Date(projectStartDate);
+        
+        if (direction === 'prev') {
+            if (scale === 'days') d.setDate(d.getDate() - 1);
+            else if (scale === 'weeks') d.setDate(d.getDate() - 7);
+            else if (scale === 'months') d.setMonth(d.getMonth() - 1);
+        } else {
+            if (scale === 'days') d.setDate(d.getDate() + 1);
+            else if (scale === 'weeks') d.setDate(d.getDate() + 7);
+            else if (scale === 'months') d.setMonth(d.getMonth() + 1);
+        }
+        
+        const newDate = d.toISOString().slice(0, 10);
+        setProjectStartDate(newDate);
+        onUpdateProject({ ...project, startDate: newDate });
+    };
 
     // Sync projectStartDate state when project prop changes
     React.useEffect(() => {
@@ -138,24 +156,40 @@ export default function ActivityScheduler({
             }
         });
         setBarCoords(coords);
-    }, [scheduleData.schedule]);
+    }, [scheduleData.schedule, scale]);
 
     React.useEffect(() => {
-        const handle = setTimeout(() => {
+        // Measure immediately to update instant changes
+        measureBars();
+
+        // Staged timeouts to capture and update positions during rendering/transitions
+        const handle1 = setTimeout(() => {
             measureBars();
         }, 50);
+
+        const handle2 = setTimeout(() => {
+            measureBars();
+        }, 150);
+
+        const handle3 = setTimeout(() => {
+            measureBars();
+        }, 350);
+
         window.addEventListener('resize', measureBars);
         return () => {
-            clearTimeout(handle);
+            clearTimeout(handle1);
+            clearTimeout(handle2);
+            clearTimeout(handle3);
             window.removeEventListener('resize', measureBars);
         };
-    }, [measureBars]);
+    }, [measureBars, scale]);
 
     const handleUpdateLaborItemSchedule = async (
         itemId: number, 
         workers: number, 
         productivity: number, 
-        predecessorId: number | undefined
+        predecessorId: number | undefined,
+        startDate?: string
     ) => {
         const originalItem = laborItems.find(a => a.id === itemId);
         if (!originalItem) return;
@@ -164,7 +198,8 @@ export default function ActivityScheduler({
             ...originalItem,
             scheduleWorkers: workers,
             scheduleProductivity: productivity,
-            schedulePredecessorId: predecessorId
+            schedulePredecessorId: predecessorId,
+            scheduleStartDate: startDate
         };
         await onUpdateLaborItem(updatedItem);
     };
@@ -217,12 +252,20 @@ export default function ActivityScheduler({
     const timelineHeaders: string[] = [];
     const timelineDates: Date[] = [];
     if (scale === 'days') {
-        // Limit columns display in Gantt to avoid UI overflow (max 45 days shown, or step by days)
-        const showDays = Math.min(45, timelineDuration);
+        // Display all columns in Gantt based on duration
+        const showDays = timelineDuration;
         for (let i = 0; i < showDays; i++) {
             const d = new Date(projectStart);
             d.setDate(projectStart.getDate() + i);
             timelineHeaders.push(d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }));
+            timelineDates.push(d);
+        }
+    } else if (scale === 'months') {
+        const monthsCount = Math.max(4, Math.ceil(timelineDuration / 30));
+        for (let i = 0; i < monthsCount; i++) {
+            const d = new Date(projectStart);
+            d.setMonth(projectStart.getMonth() + i);
+            timelineHeaders.push(d.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }));
             timelineDates.push(d);
         }
     } else {
@@ -234,6 +277,11 @@ export default function ActivityScheduler({
             timelineDates.push(d);
         }
     }
+
+    // Calculate a dynamic minimum width for the Gantt timeline to ensure columns never compress or cut off text
+    const colWidth = scale === 'days' ? 55 : scale === 'weeks' ? 120 : 175;
+    const columnsWidth = timelineHeaders.length * colWidth;
+    const totalTimelineWidth = Math.max(900, Math.ceil(columnsWidth / 0.67));
 
     const getSegments = (itemStartDate: Date, itemEndDate: Date, startCol: number, colSpan: number) => {
         if (scale !== 'days') {
@@ -445,7 +493,15 @@ export default function ActivityScheduler({
                         <h3 className="font-bold text-slate-800 text-lg">Cronograma Visual (Gantt)</h3>
                         <p className="text-xs text-slate-550">Línea de tiempo detallada de las actividades de mano de obra</p>
                     </div>
-                    <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/60">
+                    <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/60 items-center">
+                        <button
+                            onClick={() => navigateTimeline('prev')}
+                            className="p-1.5 text-slate-500 hover:text-slate-800 transition-all"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+                            </svg>
+                        </button>
                         <button
                             onClick={() => setScale('days')}
                             className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${scale === 'days' ? 'bg-white text-slate-800 shadow-xs' : 'text-slate-500 hover:text-slate-700'}`}
@@ -458,16 +514,34 @@ export default function ActivityScheduler({
                         >
                             Vista Semanal
                         </button>
+                        <button
+                            onClick={() => setScale('months')}
+                            className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${scale === 'months' ? 'bg-white text-slate-800 shadow-xs' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            Vista Mensual
+                        </button>
+                        <button
+                            onClick={() => navigateTimeline('next')}
+                            className="p-1.5 text-slate-500 hover:text-slate-800 transition-all"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                            </svg>
+                        </button>
+                        <div className="w-px h-4 bg-slate-300 mx-2" />
                     </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                    <div className="min-w-[800px] p-6 space-y-4">
+                <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200">
+                    <div 
+                        className="p-6 space-y-4"
+                        style={{ minWidth: `${totalTimelineWidth}px` }}
+                    >
                         {/* Timeline Header bar */}
-                        <div className="grid grid-cols-12 gap-4 text-xs font-bold text-slate-450 tracking-wider uppercase border-b border-slate-100 pb-2">
-                            <div className="col-span-3">Actividad / Tarea</div>
-                            <div className="col-span-1 text-center">Duración</div>
-                            <div className="col-span-8 grid" style={{ gridTemplateColumns: `repeat(${timelineHeaders.length}, minmax(0, 1fr))` }}>
+                        <div className="flex gap-4 text-xs font-bold text-slate-450 tracking-wider uppercase border-b border-slate-100 pb-2">
+                            <div className="w-[240px] shrink-0">Actividad / Tarea</div>
+                            <div className="w-[70px] shrink-0 text-center">Duración</div>
+                            <div className="flex-1 grid" style={{ gridTemplateColumns: `repeat(${timelineHeaders.length}, minmax(0, 1fr))` }}>
                                 {timelineHeaders.map((head, i) => {
                                     const date = timelineDates[i];
                                     const day = date?.getDay();
@@ -479,7 +553,7 @@ export default function ActivityScheduler({
                                     return (
                                         <div 
                                             key={i} 
-                                            className={`text-center text-[10px] truncate border-l border-slate-100/80 px-1 py-0.5 rounded-sm transition-colors ${
+                                            className={`text-center text-[11px] font-bold uppercase tracking-wide whitespace-nowrap border-l border-slate-100 px-1.5 py-1 transition-colors ${
                                                 isWeekend && scale === 'days'
                                                     ? 'bg-slate-100/90 text-slate-400 font-medium' 
                                                     : 'text-slate-500'
@@ -559,12 +633,18 @@ export default function ActivityScheduler({
                                     // Calculate total calendar span days for correct width placement
                                     const taskCalendarDays = Math.max(1, Math.ceil((item.endDate.getTime() - item.startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
                                     colSpan = taskCalendarDays;
-                                } else {
+                                } else if (scale === 'weeks') {
                                     const diffFromStartDays = Math.ceil((item.startDate.getTime() - projectStart.getTime()) / (1000 * 60 * 60 * 24));
                                     startCol = diffFromStartDays / 7;
                                     
                                     const taskCalendarDays = Math.max(1, Math.ceil((item.endDate.getTime() - item.startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
                                     colSpan = taskCalendarDays / 7;
+                                } else {
+                                    const diffFromStartDays = Math.ceil((item.startDate.getTime() - projectStart.getTime()) / (1000 * 60 * 60 * 24));
+                                    startCol = diffFromStartDays / 30;
+                                    
+                                    const taskCalendarDays = Math.max(1, Math.ceil((item.endDate.getTime() - item.startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+                                    colSpan = taskCalendarDays / 30;
                                 }
 
                                 const colorClass = getLaborColor(item.laborItem.name);
@@ -572,9 +652,9 @@ export default function ActivityScheduler({
                                 const taskCalendarSpan = Math.max(1, Math.ceil((item.endDate.getTime() - item.startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
 
                                 return (
-                                    <div key={item.id} className="grid grid-cols-12 gap-4 items-center group">
+                                    <div key={item.id} className="flex gap-4 items-center group">
                                         {/* Activity Name & Specs */}
-                                        <div className="col-span-3">
+                                        <div className="w-[240px] shrink-0">
                                             <h5 className="font-bold text-slate-800 text-xs sm:text-sm truncate" title={item.laborItem.name}>
                                                 {item.laborItem.name}
                                             </h5>
@@ -584,12 +664,12 @@ export default function ActivityScheduler({
                                         </div>
 
                                         {/* Duration text */}
-                                        <div className="col-span-1 text-center text-xs font-semibold text-slate-600 bg-slate-50 py-1 px-1.5 rounded-lg border" title={`${item.durationDays} días hábiles (${taskCalendarSpan} días totales)`}>
+                                        <div className="w-[70px] shrink-0 text-center text-xs font-semibold text-slate-600 bg-slate-50 py-1 px-1.5 rounded-lg border" title={`${item.durationDays} días hábiles (${taskCalendarSpan} días totales)`}>
                                             {item.durationDays} d.
                                         </div>
 
                                         {/* Visual Timeline Bar representation */}
-                                        <div className="col-span-8 relative h-8 bg-slate-50 rounded-xl border border-slate-100/80 overflow-hidden">
+                                        <div className="flex-1 relative h-8 bg-slate-50 rounded-xl border border-slate-100/80 overflow-hidden">
                                             {/* Background weekend columns */}
                                             {scale === 'days' && timelineDates.map((date, idx) => {
                                                 const day = date.getDay();
@@ -685,7 +765,7 @@ export default function ActivityScheduler({
                                             {isEditing ? (
                                                 <select
                                                     value={item.workers}
-                                                    onChange={(e) => handleUpdateLaborItemSchedule(item.id, Number(e.target.value), item.productivity, item.predecessorId)}
+                                                    onChange={(e) => handleUpdateLaborItemSchedule(item.id, Number(e.target.value), item.productivity, item.predecessorId, item.laborItem.scheduleStartDate)}
                                                     className="bg-white border rounded-lg px-2.5 py-1 text-xs font-semibold focus:ring-1 focus:ring-cyan-500"
                                                 >
                                                     {[1, 2, 3, 4, 5, 6, 7, 8, 10, 12].map(n => (
@@ -706,7 +786,7 @@ export default function ActivityScheduler({
                                                     <ManagedNumberInput
                                                         type="number"
                                                         value={item.productivity}
-                                                        onCommit={(v) => handleUpdateLaborItemSchedule(item.id, item.workers, parseFloat(v) || 1, item.predecessorId)}
+                                                        onCommit={(v) => handleUpdateLaborItemSchedule(item.id, item.workers, parseFloat(v) || 1, item.predecessorId, item.laborItem.scheduleStartDate)}
                                                         className="w-20 px-2 py-1 border rounded-lg text-xs font-bold text-slate-900"
                                                         step="0.1"
                                                         min="0.1"
@@ -729,7 +809,8 @@ export default function ActivityScheduler({
                                                     value={item.predecessorId || ""}
                                                     onChange={(e) => {
                                                         const val = e.target.value ? Number(e.target.value) : undefined;
-                                                        handleUpdateLaborItemSchedule(item.id, item.workers, item.productivity, val);
+                                                        const sDate = val ? undefined : item.laborItem.scheduleStartDate;
+                                                        handleUpdateLaborItemSchedule(item.id, item.workers, item.productivity, val, sDate);
                                                     }}
                                                     className="bg-white border rounded-lg px-2.5 py-1 text-xs font-semibold w-full focus:ring-1 focus:ring-cyan-500 max-w-[200px]"
                                                 >
@@ -762,12 +843,29 @@ export default function ActivityScheduler({
                                         </td>
 
                                         <td className="p-4 text-center text-xs font-semibold text-slate-650">
-                                            <span className="block font-bold text-slate-800">
-                                                {item.startDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
-                                            </span>
-                                            <span className="text-[10px] text-slate-450">
-                                                al {item.endDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
-                                            </span>
+                                            {!item.predecessorId ? (
+                                                <div className="flex flex-col items-center gap-1 min-w-[125px]">
+                                                    <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Inicio (Raíz):</span>
+                                                    <input
+                                                        type="date"
+                                                        value={item.laborItem.scheduleStartDate || projectStartDate}
+                                                        onChange={(e) => handleUpdateLaborItemSchedule(item.id, item.workers, item.productivity, item.predecessorId, e.target.value)}
+                                                        className="bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-cyan-500 text-center w-full max-w-[130px] cursor-pointer"
+                                                    />
+                                                    <span className="text-[10px] text-slate-450 font-semibold block">
+                                                        Fin: {item.endDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <div className="flex flex-col items-center">
+                                                    <span className="block font-bold text-slate-800">
+                                                        {item.startDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                                                    </span>
+                                                    <span className="text-[10px] text-slate-450">
+                                                        al {item.endDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                                                    </span>
+                                                </div>
+                                            )}
                                         </td>
 
                                         <td className="p-4 text-right">

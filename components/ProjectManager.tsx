@@ -15,7 +15,8 @@ import {
     duplicateProject
 } from '../services/database';
 import { calculateMaterials } from '../services/calculations';
-import { exportProjectToPDF } from '../services/pdf';
+import { exportProjectToPDF, exportScheduleToPDF } from '../services/pdf';
+import { calculateSchedule } from '../services/schedule';
 import { calculateCertificationSnapshot, calculateConsolidatedCertificationSnapshot } from '../services/certificationHelper';
 import Modal from './Modal';
 import ActivityForm from './ActivityForm';
@@ -1356,6 +1357,13 @@ export const ProjectManager: React.FC = () => {
             exportProjectToPDF(selectedProject, activities, totalMaterials, materialGrandTotal.usd, laborItems, laborGrandTotal.usd, allBudgetItemsForExport, budgetGrandTotal.usd + taxGrandTotal.usd, transactions, effectiveExchangeRate);
         }
     };
+
+    const handleExportSchedule = () => {
+        if (selectedProject) {
+            const metrics = calculateSchedule(laborItems, selectedProject.startDate || new Date().toISOString().slice(0,10), !!selectedProject.excludeSaturdays, !!selectedProject.excludeSundays);
+            exportScheduleToPDF(selectedProject, Object.values(metrics.scheduleItems));
+        }
+    };
     
     const handleConfirmBuyAll = async (activity: Activity, addToInventory: boolean) => {
         if (!selectedProject) return;
@@ -2266,6 +2274,9 @@ export const ProjectManager: React.FC = () => {
                                     </button>
                                      <button onClick={() => { setIsOfferModalOpen(true); setIsPdfDropdownOpen(false); }} className="w-full text-left text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100" role="menuitem">
                                         Generar Oferta Comercial
+                                    </button>
+                                    <button onClick={() => { handleExportSchedule(); setIsPdfDropdownOpen(false); }} className="w-full text-left text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100" role="menuitem">
+                                        Generar Cronograma de Obra
                                     </button>
                                 </div>
                             </div>

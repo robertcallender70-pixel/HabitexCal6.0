@@ -358,6 +358,270 @@ export const exportProjectToPDF = (
     doc.save(`Habitex_Calcula_${project.name.replace(/\s/g, '_')}_${new Date().toISOString().slice(0,10)}.pdf`);
 };
 
+// --- Export Schedule to PDF ---
+export const exportScheduleToPDF = (
+    project: Project,
+    scheduleItems: any[],
+): void => {
+    const { jsPDF } = jspdf;
+    const doc = new jsPDF('l', 'mm', 'a4');
+
+    const scheduleList = [...scheduleItems].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+
+    let minDate = new Date();
+    let maxDate = new Date();
+    if (scheduleList.length > 0) {
+        minDate = new Date(Math.min(...scheduleList.map(item => new Date(item.startDate).getTime())));
+        maxDate = new Date(Math.max(...scheduleList.map(item => new Date(item.endDate).getTime())));
+    }
+
+    const calendarDays = Math.max(1, Math.ceil((maxDate.getTime() - minDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+    const sumOfDurationDays = scheduleList.reduce((acc, item) => acc + (item.durationDays || 0), 0);
+
+    // --- Page 1 Header ---
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 118, 110);
+    doc.text(`Cronograma de Obra: ${project.name}`, 14, 18);
+
+    // --- Project Summary Card ---
+    doc.setFillColor(248, 250, 252); // slate-50
+    doc.setDrawColor(226, 232, 240); // slate-200
+    doc.setLineWidth(0.35);
+    doc.roundedRect(14, 25, 269, 28, 2, 2, 'FD');
+
+    // Left Accent Bar
+    doc.setFillColor(15, 118, 110);
+    doc.rect(14, 25, 3, 28, 'F');
+
+    // Box Contents
+    doc.setFontSize(9.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 118, 110);
+    doc.text('RESUMEN GENERAL DEL PLAN DE TRABAJO', 21, 31);
+
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Fecha de Inicio: ${minDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}`, 21, 39);
+    doc.text(`Fecha de Finalización: ${maxDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}`, 21, 46);
+
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Duración de Ejecución: ${sumOfDurationDays} días hábiles`, 145, 39);
+    doc.text(`Tiempo Calendario Transcurrido: ${calendarDays} días corridos`, 145, 46);
+
+    // --- Activities Table ---
+    (doc as any).autoTable({
+        startY: 60,
+        head: [['Actividad / Tarea de Mano de Obra', 'Inicio', 'Fin', 'Duración (días hábiles)']],
+        body: scheduleList.map(item => [
+            item.laborItem.name,
+            new Date(item.startDate).toLocaleDateString('es-ES'),
+            new Date(item.endDate).toLocaleDateString('es-ES'),
+            `${item.durationDays} días`
+        ]),
+        foot: [['Total de Días de Mano de Obra', '', '', `${sumOfDurationDays} días hábiles`]],
+        theme: 'striped',
+        headStyles: { fillColor: [15, 118, 110], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+        bodyStyles: { fontSize: 8.5, textColor: [30, 41, 59] },
+        footStyles: { fillColor: [241, 245, 249], textColor: [15, 118, 110], fontStyle: 'bold', fontSize: 9, lineWidth: 0.5, drawColor: [203, 213, 225] },
+        margin: { left: 14, right: 14 }
+    });
+
+    // --- Page 2 & onwards: Elegant Gantt Chart ---
+    if (scheduleList.length > 0) {
+        const getMonday = (d: Date) => {
+            const date = new Date(d);
+            const day = date.getDay();
+            const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+            return new Date(date.setDate(diff));
+        };
+
+        const getSunday = (d: Date) => {
+            const date = new Date(d);
+            const day = date.getDay();
+            const diff = date.getDate() + (day === 0 ? 0 : 7 - day);
+            return new Date(date.setDate(diff));
+        };
+
+        const ganttStartDate = getMonday(minDate);
+        const ganttEndDate = getSunday(maxDate);
+        const totalWeeks = Math.max(1, Math.ceil(((ganttEndDate.getTime() - ganttStartDate.getTime()) / (1000 * 60 * 60 * 24) + 1) / 7));
+
+        doc.addPage('a4', 'l');
+
+        // Draw Gantt header for first gantt page
+        let currentY = 37;
+        const ganttPageHeight = 195;
+        const rowHeight = 11;
+        const wWeek = 199 / totalWeeks;
+
+        const drawGanttHeaders = (pageTitle: string) => {
+            doc.setFontSize(14);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(15, 118, 110);
+            doc.text(pageTitle, 14, 15);
+
+            // Columns layout: Actividad (70mm), Weeks (199mm). Total: 269mm. Margins: 14mm to 283mm.
+            // Weeks Headers
+            for (let w = 0; w < totalWeeks; w++) {
+                const weekStart = new Date(ganttStartDate);
+                weekStart.setDate(weekStart.getDate() + w * 7);
+                const weekEnd = new Date(weekStart);
+                weekEnd.setDate(weekEnd.getDate() + 6);
+
+                const xWeek = 84 + w * wWeek;
+                doc.setFillColor(241, 245, 249);
+                doc.setDrawColor(203, 213, 225);
+                doc.setLineWidth(0.2);
+                doc.rect(xWeek, 23, wWeek, 12, 'FD');
+
+                // Semana Title
+                doc.setFontSize(7.5);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(51, 65, 85);
+                doc.text(`Semana ${w + 1}`, xWeek + wWeek / 2, 28, { align: 'center' });
+
+                // Weeks Dates
+                doc.setFontSize(6);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(100, 116, 139);
+                const rangeStr = `${weekStart.getDate()}/${weekStart.getMonth() + 1} - ${weekEnd.getDate()}/${weekEnd.getMonth() + 1}`;
+                doc.text(rangeStr, xWeek + wWeek / 2, 32, { align: 'center' });
+            }
+
+            // Actividad Header
+            doc.setFillColor(241, 245, 249);
+            doc.setDrawColor(203, 213, 225);
+            doc.rect(14, 23, 70, 12, 'FD');
+            doc.setFontSize(8.5);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(51, 65, 85);
+            doc.text('Actividad / Tarea', 17, 30);
+        };
+
+        drawGanttHeaders(`DIAGRAMA DE GANTT (PLANIFICACIÓN SEMANAL)`);
+
+        const pageBars: Record<number, { xEnd: number; yMid: number }> = {};
+
+        scheduleList.forEach((item, index) => {
+            if (currentY + rowHeight > ganttPageHeight) {
+                doc.addPage('a4', 'l');
+                drawGanttHeaders(`DIAGRAMA DE GANTT (PLANIFICACIÓN SEMANAL) - Cont.`);
+                currentY = 37;
+                // Clear pageBars coordinates for the new page since drawing canvas is reset
+                Object.keys(pageBars).forEach(k => delete pageBars[Number(k)]);
+            }
+
+            // Alternating row background
+            doc.setFillColor(index % 2 === 0 ? 255 : 252, index % 2 === 0 ? 255 : 252, index % 2 === 0 ? 255 : 252);
+            doc.setDrawColor(226, 232, 240);
+            doc.setLineWidth(0.15);
+            doc.rect(14, currentY, 269, rowHeight, 'FD');
+
+            // Activity Text Name
+            doc.setFontSize(7.5);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(15, 118, 110);
+            let actName = item.laborItem.name;
+            if (actName.length > 34) {
+                actName = actName.substring(0, 32) + '...';
+            }
+            doc.text(actName, 17, currentY + 6.5);
+
+            // Vertical line dividing text col and schedule
+            doc.setDrawColor(203, 213, 225);
+            doc.setLineWidth(0.25);
+            doc.line(84, currentY, 84, currentY + rowHeight);
+
+            // Grid vertical line separator for weeks
+            doc.setDrawColor(241, 245, 249);
+            doc.setLineWidth(0.15);
+            for (let w = 1; w < totalWeeks; w++) {
+                const xGrid = 84 + w * wWeek;
+                doc.line(xGrid, currentY, xGrid, currentY + rowHeight);
+            }
+
+            // Calculate precise bar sizing
+            const totalProjectDays = (ganttEndDate.getTime() - ganttStartDate.getTime()) / (1000 * 60 * 60 * 24) + 1;
+            const startDiffDays = (new Date(item.startDate).getTime() - ganttStartDate.getTime()) / (1000 * 60 * 60 * 24);
+            const endDiffDays = (new Date(item.endDate).getTime() - ganttStartDate.getTime()) / (1000 * 60 * 60 * 24) + 1;
+
+            const xBarStart = 84 + (startDiffDays / totalProjectDays) * 199;
+            const xBarEnd = 84 + (endDiffDays / totalProjectDays) * 199;
+            let barWidth = xBarEnd - xBarStart;
+            if (barWidth < 2) barWidth = 2;
+
+            const yBar = currentY + 3;
+            const hBar = 5;
+            const yMid = yBar + hBar / 2;
+
+            // Draw Activity Bar (Elegant Soft Rounded teal bar)
+            doc.setFillColor(15, 118, 110);
+            doc.roundedRect(xBarStart, yBar, barWidth, hBar, 1, 1, 'F');
+
+            // Bar duration label
+            doc.setFontSize(6);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(255, 255, 255);
+            const durationLabel = `${item.durationDays}d`;
+
+            if (barWidth > 9) {
+                doc.text(durationLabel, xBarStart + barWidth / 2, yBar + 3.5, { align: 'center' });
+            } else {
+                doc.setTextColor(71, 85, 105);
+                doc.text(durationLabel, xBarStart + barWidth + 1.2, yBar + 3.5);
+            }
+
+            // Draw Fin-Inicio Dependency Connection Line (Codo en S/Z con micro flecha)
+            if (item.predecessorId && pageBars[item.predecessorId]) {
+                const pred = pageBars[item.predecessorId];
+                doc.setDrawColor(2, 132, 199); // Sky blue
+                doc.setLineWidth(0.35);
+
+                const xPrev = pred.xEnd;
+                const yPrev = pred.yMid;
+                const xCurr = xBarStart;
+                const yCurr = yMid;
+
+                // Dynamic codo calculation
+                const minExit = 3; // mm
+                if (xCurr >= xPrev + minExit) {
+                    // Normal: successor starts after predecessor ends
+                    const xMid = xPrev + (xCurr - xPrev) / 2;
+                    doc.line(xPrev, yPrev, xMid, yPrev);
+                    doc.line(xMid, yPrev, xMid, yCurr);
+                    doc.line(xMid, yCurr, xCurr, yCurr);
+                } else {
+                    // Overlap: successor starts before predecessor ends (loop back path)
+                    const exitX = xPrev + minExit;
+                    const entryX = xCurr - minExit;
+                    const midY = yPrev + (yCurr - yPrev) / 2;
+                    doc.line(xPrev, yPrev, exitX, yPrev);
+                    doc.line(exitX, yPrev, exitX, midY);
+                    doc.line(exitX, midY, entryX, midY);
+                    doc.line(entryX, midY, entryX, yCurr);
+                    doc.line(entryX, yCurr, xCurr, yCurr);
+                }
+
+                // Small triangle arrow tip
+                doc.setFillColor(2, 132, 199);
+                doc.triangle(xCurr, yCurr, xCurr - 1.2, yCurr - 0.8, xCurr - 1.2, yCurr + 0.8, 'F');
+            }
+
+            // Save coords for next activity connection
+            pageBars[item.id] = {
+                xEnd: xBarEnd,
+                yMid: yMid
+            };
+
+            currentY += rowHeight;
+        });
+    }
+
+    doc.save(`Cronograma_${project.name.replace(/\s/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`);
+};
+
 // --- Export Invoice To PDF ---
 export const exportInvoiceToPDF = (data: InvoiceData): Blob => {
     const {
@@ -916,6 +1180,37 @@ export const exportOfferDetailedToPDF = (data: OfferData): void => {
             theme: 'striped',
             headStyles: { fillColor: [15, 118, 110], textColor: 255, fontSize: 8.5 },
             footStyles: { fillColor: [240, 249, 250], textColor: [15, 118, 110], fontSize: 8.5 },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
+            margin: { left: 14, right: 14 },
+            didDrawPage: (data: any) => { lastY = data.cursor.y; }
+        });
+        lastY = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    // --- Add Schedule Table ---
+    if (data.scheduleItems) {
+        if (lastY > doc.internal.pageSize.height - 50) {
+            doc.addPage();
+            lastY = 20;
+        }
+        doc.setFontSize(10.5);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(15, 118, 110);
+        doc.text('1.2 Cronograma Estimado de Actividades', 14, lastY);
+        
+        const scheduleList = Object.values(data.scheduleItems).sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
+
+        (doc as any).autoTable({
+            startY: lastY + 3,
+            head: [['Actividad', 'Inicio', 'Fin', 'Duración (días hábiles)']],
+            body: scheduleList.map(item => [
+                item.laborItem.name,
+                item.startDate.toLocaleDateString('es-ES'),
+                item.endDate.toLocaleDateString('es-ES'),
+                item.durationDays
+            ]),
+            theme: 'striped',
+            headStyles: { fillColor: [15, 118, 110], textColor: 255, fontSize: 8.5 },
             alternateRowStyles: { fillColor: [248, 250, 252] },
             margin: { left: 14, right: 14 },
             didDrawPage: (data: any) => { lastY = data.cursor.y; }

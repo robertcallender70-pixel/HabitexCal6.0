@@ -173,6 +173,7 @@ export function calculateSchedule(
         const productivity = item.scheduleProductivity != null ? Number(item.scheduleProductivity) : getDefaultProductivity(item.name, item.unit);
         const durationDays = Math.max(1, Math.ceil(item.quantity / (workers * productivity)));
         const predecessorId = item.schedulePredecessorId ? Number(item.schedulePredecessorId) : undefined;
+        const scheduleStartDate = item.scheduleStartDate;
         
         return {
             id: item.id!,
@@ -182,7 +183,8 @@ export function calculateSchedule(
             workers,
             productivity,
             durationDays,
-            predecessorId
+            predecessorId,
+            scheduleStartDate
         };
     });
 
@@ -197,7 +199,14 @@ export function calculateSchedule(
             if (resolvedIds.has(spec.id)) continue;
 
             if (!spec.predecessorId || !laborItems.some(a => a.id === spec.predecessorId)) {
-                const sDate = getNextWorkingDate(new Date(localStart), excludeSaturdays, excludeSundays);
+                let sDate: Date;
+                if (spec.scheduleStartDate) {
+                    const customS = new Date(spec.scheduleStartDate);
+                    sDate = new Date(customS.getTime() + customS.getTimezoneOffset() * 60 * 1000);
+                } else {
+                    sDate = new Date(localStart);
+                }
+                sDate = getNextWorkingDate(sDate, excludeSaturdays, excludeSundays);
                 const { endDate: eDate } = calculateEndAndWorkingDays(sDate, spec.durationDays, excludeSaturdays, excludeSundays);
                 
                 initialSchedule[spec.id] = {
@@ -228,7 +237,14 @@ export function calculateSchedule(
     // Default unresolved initial items
     for (const spec of initialSpecs) {
         if (!resolvedIds.has(spec.id)) {
-            const sDate = getNextWorkingDate(new Date(localStart), excludeSaturdays, excludeSundays);
+            let sDate: Date;
+            if (spec.scheduleStartDate) {
+                const customS = new Date(spec.scheduleStartDate);
+                sDate = new Date(customS.getTime() + customS.getTimezoneOffset() * 60 * 1000);
+            } else {
+                sDate = new Date(localStart);
+            }
+            sDate = getNextWorkingDate(sDate, excludeSaturdays, excludeSundays);
             const { endDate: eDate } = calculateEndAndWorkingDays(sDate, spec.durationDays, excludeSaturdays, excludeSundays);
             initialSchedule[spec.id] = {
                 ...spec,
@@ -252,6 +268,7 @@ export function calculateSchedule(
         const remainingQty = Math.max(0, item.quantity - completed);
         const durationDays = remainingQty <= 0.01 ? 0 : Math.max(1, Math.ceil(remainingQty / (workers * productivity)));
         const predecessorId = item.schedulePredecessorId ? Number(item.schedulePredecessorId) : undefined;
+        const scheduleStartDate = item.scheduleStartDate;
         
         return {
             id: item.id!,
@@ -261,7 +278,8 @@ export function calculateSchedule(
             workers,
             productivity,
             durationDays,
-            predecessorId
+            predecessorId,
+            scheduleStartDate
         };
     });
 
@@ -275,7 +293,14 @@ export function calculateSchedule(
             if (resolvedIds.has(spec.id)) continue;
 
             if (!spec.predecessorId || !laborItems.some(a => a.id === spec.predecessorId)) {
-                const sDate = getNextWorkingDate(new Date(localStart), excludeSaturdays, excludeSundays);
+                let sDate: Date;
+                if (spec.scheduleStartDate) {
+                    const customS = new Date(spec.scheduleStartDate);
+                    sDate = new Date(customS.getTime() + customS.getTimezoneOffset() * 60 * 1000);
+                } else {
+                    sDate = new Date(localStart);
+                }
+                sDate = getNextWorkingDate(sDate, excludeSaturdays, excludeSundays);
                 const { endDate: eDate } = calculateEndAndWorkingDays(sDate, spec.durationDays, excludeSaturdays, excludeSundays);
                 
                 remainingSchedule[spec.id] = {
@@ -306,7 +331,14 @@ export function calculateSchedule(
     // Default unresolved remaining items
     for (const spec of remainingSpecs) {
         if (!resolvedIds.has(spec.id)) {
-            const sDate = getNextWorkingDate(new Date(localStart), excludeSaturdays, excludeSundays);
+            let sDate: Date;
+            if (spec.scheduleStartDate) {
+                const customS = new Date(spec.scheduleStartDate);
+                sDate = new Date(customS.getTime() + customS.getTimezoneOffset() * 60 * 1000);
+            } else {
+                sDate = new Date(localStart);
+            }
+            sDate = getNextWorkingDate(sDate, excludeSaturdays, excludeSundays);
             const { endDate: eDate } = calculateEndAndWorkingDays(sDate, spec.durationDays, excludeSaturdays, excludeSundays);
             remainingSchedule[spec.id] = {
                 ...spec,

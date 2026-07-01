@@ -1,1 +1,27 @@
 /* Habitex Calcula Pro Custom App Stylesheet */
+
+@media print {
+    body, html {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+    }
+    
+    .no-print {
+        display: none !important;
+    }
+    
+    .print-only {
+        display: block !important;
+    }
+    
+    /* Make the Gantt chart container visible and not cut off */
+    .overflow-x-auto {
+        overflow-x: visible !important;
+    }
+    
+    .min-w-\[800px\] {
+        min-width: 100% !important;
+    }
+}
