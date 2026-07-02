@@ -76,6 +76,12 @@ const UnlinkIcon = (props: any) => (
     </svg>
 );
 
+const ArrowPathIcon = (props: any) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+    </svg>
+);
+
 const BudgetProgressBar = ({ current, total, formatCurrency }: { current: number, total: number, formatCurrency: (val: number) => string }) => {
     const progress = total > 0 ? (current / total) * 100 : 0;
     const isOver = progress > 100.01;
@@ -92,6 +98,44 @@ const BudgetProgressBar = ({ current, total, formatCurrency }: { current: number
             </div>
         </div>
     )
+};
+
+
+export const getMaterialPrice = (name: string, unit: string, prices: Record<string, number>): number => {
+    if (!prices) return 0;
+    const trimmedName = name.trim();
+    const trimmedUnit = unit.trim();
+    
+    // 1. Try exact match on trimmed
+    const exactTrimmedKey = `${trimmedName}-${trimmedUnit}`;
+    if (prices[exactTrimmedKey] !== undefined) {
+        return prices[exactTrimmedKey];
+    }
+
+    // 2. Try match on original key format
+    const originalKey = `${name}-${unit}`;
+    if (prices[originalKey] !== undefined) {
+        return prices[originalKey];
+    }
+
+    // 3. Case-insensitive and trimmed key match
+    const lowerKey = `${trimmedName.toLowerCase()}-${trimmedUnit.toLowerCase()}`;
+    for (const [key, val] of Object.entries(prices)) {
+        if (key.trim().toLowerCase() === lowerKey) {
+            return val;
+        }
+    }
+
+    // 4. Fallback: match name only (case-insensitive and trimmed)
+    const lowerName = trimmedName.toLowerCase();
+    for (const [key, val] of Object.entries(prices)) {
+        const parts = key.split('-');
+        if (parts.length > 0 && parts[0].trim().toLowerCase() === lowerName) {
+            return val;
+        }
+    }
+
+    return 0;
 };
 
 
@@ -259,8 +303,26 @@ export const ProjectManager: React.FC = () => {
         }
     }, []);
 
+    const getProjectOrGlobalMaterialPrice = React.useCallback((materialName: string, materialUnit: string, currentActivityId?: number): number => {
+        // 1. Search in existing activities of the current project (excluding the one being edited, if any)
+        for (const activity of activities) {
+            if (currentActivityId && activity.id === currentActivityId) continue;
+            const match = activity.results.find(m => 
+                m.name.trim().toLowerCase() === materialName.trim().toLowerCase() && 
+                m.unit.trim().toLowerCase() === materialUnit.trim().toLowerCase() &&
+                m.unitPrice !== undefined && m.unitPrice > 0
+            );
+            if (match && match.unitPrice) {
+                return match.unitPrice;
+            }
+        }
+        
+        // 2. Fallback to global prices
+        return getMaterialPrice(materialName, materialUnit, materialPrices) || 0;
+    }, [activities, materialPrices]);
+
     const loadProjectData = React.useCallback(async () => {
-        if (!selectedProject?.id) return;
+        if (!selectedProject?.id || !libraryData) return;
         setIsLoading(true);
         try {
             const [
@@ -280,17 +342,42 @@ export const ProjectManager: React.FC = () => {
             ]);
 
             const hydratedActivities = activitiesFromDB.map(activity => {
-                const needsHydration = activity.results.some(m => m.unitPrice === undefined);
-                if (needsHydration) {
-                    const updatedResults = activity.results.map(material => {
-                        if (material.unitPrice !== undefined) {
-                            return material;
+                let changed = false;
+                const updatedResults = activity.results.map(material => {
+                    if (material.unitPrice !== undefined && material.unitPrice > 0) {
+                        return material;
+                    }
+                    
+                    // Try to find a project-specific price in other activities of activitiesFromDB first!
+                    let resolvedPrice = 0;
+                    for (const act of activitiesFromDB) {
+                        if (act.id === activity.id) continue;
+                        const match = act.results.find(m => 
+                            m.name.trim().toLowerCase() === material.name.trim().toLowerCase() && 
+                            m.unit.trim().toLowerCase() === material.unit.trim().toLowerCase() &&
+                            m.unitPrice !== undefined && m.unitPrice > 0
+                        );
+                        if (match && match.unitPrice) {
+                            resolvedPrice = match.unitPrice;
+                            break;
                         }
-                        return {
-                            ...material,
-                            unitPrice: materialPrices[`${material.name}-${material.unit}`] || 0,
-                        };
-                    });
+                    }
+                    
+                    if (resolvedPrice === 0) {
+                        resolvedPrice = getMaterialPrice(material.name, material.unit, materialPrices) || 0;
+                    }
+
+                    if (material.unitPrice !== resolvedPrice) {
+                        changed = true;
+                    }
+
+                    return {
+                        ...material,
+                        unitPrice: resolvedPrice,
+                    };
+                });
+                
+                if (changed) {
                     const hydratedActivity = { ...activity, results: updatedResults };
                     updateActivity(hydratedActivity);
                     return hydratedActivity;
@@ -309,10 +396,10 @@ export const ProjectManager: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [selectedProject, materialPrices]);
+    }, [selectedProject, materialPrices, libraryData]);
     
     const loadParentProjectData = React.useCallback(async () => {
-        if (!selectedProject?.id) return;
+        if (!selectedProject?.id || !libraryData) return;
         setIsLoading(true);
 
         try {
@@ -355,7 +442,7 @@ export const ProjectManager: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [selectedProject, loadProjectData]);
+    }, [selectedProject, loadProjectData, libraryData]);
 
 
     React.useEffect(() => {
@@ -415,7 +502,7 @@ export const ProjectManager: React.FC = () => {
                     if (material.name.toLowerCase().includes('acero') && material.unit.toLowerCase() === 'kg') {
                         return activityTotal;
                     }
-                    const price = material.unitPrice ?? allMaterialPrices[`${material.name}-${material.unit}`] ?? 0;
+                    const price = material.unitPrice || getMaterialPrice(material.name, material.unit, allMaterialPrices) || 0;
                     return activityTotal + (Number(material.quantity) * price);
                 }, 0);
             }, 0);
@@ -775,10 +862,22 @@ export const ProjectManager: React.FC = () => {
         }
         
         const results = await calculateMaterials(selectedActivityType, parsedInputs);
-        const resultsWithPrices = results.map(material => ({
-            ...material,
-            unitPrice: materialPrices[`${material.name}-${material.unit}`] || 0
-        }));
+        const resultsWithPrices = results.map(material => {
+            if (editingActivity) {
+                const existingMaterial = editingActivity.results.find(m => 
+                    m.name.trim().toLowerCase() === material.name.trim().toLowerCase() && 
+                    m.unit.trim().toLowerCase() === material.unit.trim().toLowerCase()
+                );
+                if (existingMaterial && existingMaterial.unitPrice !== undefined && existingMaterial.unitPrice > 0) {
+                    return { ...material, unitPrice: existingMaterial.unitPrice };
+                }
+            }
+            const price = getProjectOrGlobalMaterialPrice(material.name, material.unit, editingActivity?.id);
+            return {
+                ...material,
+                unitPrice: price
+            };
+        });
 
         
         if (editingActivity) {
@@ -954,7 +1053,9 @@ export const ProjectManager: React.FC = () => {
         const newActivities = activities.map(activity => {
             let activityWasUpdated = false;
             const newResults = activity.results.map(material => {
-                if (material.name === materialName && material.unit === materialUnit && material.unitPrice !== finalPriceUSD) {
+                if (material.name.trim().toLowerCase() === materialName.trim().toLowerCase() && 
+                    material.unit.trim().toLowerCase() === materialUnit.trim().toLowerCase() && 
+                    material.unitPrice !== finalPriceUSD) {
                     activityWasUpdated = true;
                     return { ...material, unitPrice: finalPriceUSD };
                 }
@@ -1050,7 +1151,7 @@ export const ProjectManager: React.FC = () => {
          return Object.values(summary)
             .map(material => {
                 const key = `${material.name.trim().toLowerCase()}-${material.unit.trim().toLowerCase()}`;
-                const currentPrice = material.unitPrice ?? materialPrices[`${material.name}-${material.unit}`] ?? 0;
+                const currentPrice = material.unitPrice || getMaterialPrice(material.name, material.unit, materialPrices) || 0;
                 
                 const quantityAvailable = inventoryPurchasedMap[key] || 0;
                 return {
@@ -1074,7 +1175,7 @@ export const ProjectManager: React.FC = () => {
                 if (material.name.toLowerCase().includes('acero') && material.unit.toLowerCase() === 'kg') {
                     return activityTotal;
                 }
-                const currentPrice = material.unitPrice ?? materialPrices[`${material.name}-${material.unit}`] ?? 0;
+                const currentPrice = material.unitPrice || getMaterialPrice(material.name, material.unit, materialPrices) || 0;
                 return activityTotal + (Number(material.quantity) * currentPrice);
             }, 0);
             const rate = getRate(activity.projectId);
@@ -1125,7 +1226,7 @@ export const ProjectManager: React.FC = () => {
             
             const projMaterial = activities.filter(a => a.projectId === proj.id).reduce((sum, a) => sum + a.results.reduce((s, m) => {
                 if (m.name.toLowerCase().includes('acero') && m.unit.toLowerCase() === 'kg') return s;
-                const currentPrice = m.unitPrice ?? materialPrices[`${m.name}-${m.unit}`] ?? 0;
+                const currentPrice = m.unitPrice || getMaterialPrice(m.name, m.unit, materialPrices) || 0;
                 return s + (Number(m.quantity) * currentPrice);
             }, 0), 0);
             
@@ -1365,18 +1466,32 @@ export const ProjectManager: React.FC = () => {
         }
     };
     
-    const handleConfirmBuyAll = async (activity: Activity, addToInventory: boolean) => {
+    const handleConfirmBuyAll = async (activity: Activity, addToInventory: boolean, subtractInventory: boolean) => {
         if (!selectedProject) return;
 
-        const materialsToBuy = activity.results.filter(m => {
+        const materialsToBuy = activity.results.map(m => {
+            const key = `${m.name.trim().toLowerCase()}-${m.unit.trim().toLowerCase()}`;
+            const currentPrice = m.unitPrice || getMaterialPrice(m.name, m.unit, materialPrices) || 0;
+            
+            // Calculate available quantity in inventory for this specific project/material
+            const available = inventoryItems
+                .filter(item => `${item.name.trim().toLowerCase()}-${item.unit.trim().toLowerCase()}` === key)
+                .reduce((sum, item) => sum + (Number(item.quantityPurchased) - Number(item.quantityUsed)), 0);
+
+            const quantityNeeded = subtractInventory ? Math.max(0, m.quantity - available) : m.quantity;
+
+            return {
+                ...m,
+                unitPrice: currentPrice,
+                quantityNeeded
+            };
+        }).filter(m => {
             if (m.name.toLowerCase().includes('acero') && m.unit.toLowerCase() === 'kg') return false;
-            // FIX: Changed material to m to match filter parameter
-            const currentPrice = m.unitPrice ?? materialPrices[`${m.name}-${m.unit}`] ?? 0;
-            return currentPrice > 0;
+            return m.unitPrice > 0 && m.quantityNeeded > 0;
         });
 
         if (materialsToBuy.length === 0) {
-            alert("No hay materiales con precio definido en esta actividad para comprar.");
+            alert("No hay materiales con precio definido o faltantes en esta actividad para comprar.");
             closeModals();
             return;
         }
@@ -1384,8 +1499,7 @@ export const ProjectManager: React.FC = () => {
         const date = new Date().toISOString().slice(0, 10);
 
         for (const material of materialsToBuy) {
-            const currentPrice = material.unitPrice ?? materialPrices[`${material.name}-${material.unit}`] ?? 0;
-            const totalCost = material.quantity * currentPrice;
+            const totalCost = material.quantityNeeded * material.unitPrice;
             if (totalCost <= 0) continue; 
 
             const transaction: Omit<Transaction, 'id' | 'projectId'> = {
@@ -1404,7 +1518,7 @@ export const ProjectManager: React.FC = () => {
                 }
                 const inventoryItem: Omit<InventoryItem, 'id' | 'projectId' | 'quantityUsed' | 'dateAdded'> = {
                     name: material.name,
-                    quantityPurchased: material.quantity,
+                    quantityPurchased: material.quantityNeeded,
                     unit: material.unit,
                 };
                 await addInventoryItem({
@@ -1416,6 +1530,7 @@ export const ProjectManager: React.FC = () => {
             }
         }
 
+        await updateActivity({ ...activity, materialsPurchased: true });
         await loadProjectData();
         closeModals();
     };
@@ -1546,7 +1661,20 @@ export const ProjectManager: React.FC = () => {
                     for (const activity of activitiesToUpdate) {
                         if (activity.type === ActivityType.CUSTOM) continue;
                         const newResults = await calculateMaterials(activity.type, activity.inputs);
-                        await updateActivity({ ...activity, results: newResults });
+                        
+                        const resultsWithPrices = newResults.map(material => {
+                            const existingMaterial = activity.results.find(m => 
+                                m.name.trim().toLowerCase() === material.name.trim().toLowerCase() && 
+                                m.unit.trim().toLowerCase() === material.unit.trim().toLowerCase()
+                            );
+                            if (existingMaterial && existingMaterial.unitPrice !== undefined && existingMaterial.unitPrice > 0) {
+                                return { ...material, unitPrice: existingMaterial.unitPrice };
+                            }
+                            const price = getProjectOrGlobalMaterialPrice(material.name, material.unit, activity.id);
+                            return { ...material, unitPrice: price };
+                        });
+
+                        await updateActivity({ ...activity, results: resultsWithPrices });
                     }
 
                     const laborLibrary: PredefinedLaborActivity[] = freshLibrary.labor_activities || [];
@@ -1671,7 +1799,7 @@ export const ProjectManager: React.FC = () => {
             totalMaterials
                 .filter(m => m.quantityNeeded && m.quantityNeeded > 0 && (m.unitPrice || 0) > 0)
                 .forEach(material => {
-                    const currentPrice = material.unitPrice ?? materialPrices[`${material.name}-${material.unit}`] ?? 0;
+                    const currentPrice = material.unitPrice || getMaterialPrice(material.name, material.unit, materialPrices) || 0;
                     const totalCost = material.quantityNeeded! * currentPrice;
                     newTransactionPromises.push(addTransaction({
                         projectId: selectedProject.id!,
@@ -2926,7 +3054,7 @@ export const ProjectManager: React.FC = () => {
                         </div>
                     ) : (
                         activities.map(activity => (
-                            <div key={activity.id} className={`p-4 border rounded-lg transition-colors ${selectedActivityIds.has(activity.id!) ? 'border-cyan-500 bg-cyan-50 shadow-sm' : 'bg-white'}`}>
+                            <div key={activity.id} className={`p-4 border rounded-lg transition-colors ${selectedActivityIds.has(activity.id!) ? 'border-cyan-500 bg-cyan-50 shadow-sm' : activity.materialsPurchased ? 'border-emerald-100 bg-emerald-50/20' : 'bg-white'}`}>
                                 <div className="flex justify-between items-start">
                                     <div className="flex items-start gap-3">
                                         <input 
@@ -2936,25 +3064,52 @@ export const ProjectManager: React.FC = () => {
                                             className="h-5 w-5 mt-1 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500"
                                         />
                                         <div>
-                                            <h4 className="font-bold text-slate-800">{activity.name}</h4>
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <h4 className="font-bold text-slate-800">{activity.name}</h4>
+                                                {activity.materialsPurchased && (
+                                                    <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-full flex items-center gap-0.5 shadow-sm animate-pulse">
+                                                        ✓ Comprado
+                                                    </span>
+                                                )}
+                                            </div>
                                             <p className="text-sm text-cyan-600 font-medium">{getActivitySubtitle(activity)}</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
+                                        {activity.materialsPurchased && (
+                                            <button 
+                                                onClick={async (e) => {
+                                                    e.stopPropagation();
+                                                    if (confirm("¿Desea restablecer el estado de compra de esta actividad?")) {
+                                                        await updateActivity({ ...activity, materialsPurchased: false });
+                                                        await loadProjectData();
+                                                    }
+                                                }} 
+                                                className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-slate-100 rounded transition-colors"
+                                                title="Desmarcar como comprado (Restablecer estado)"
+                                            >
+                                                <ArrowPathIcon className="h-5 w-5"/>
+                                            </button>
+                                        )}
                                         <button 
                                             onClick={() => handleOpenBuyAllModal(activity)} 
-                                            className="p-2 text-slate-500 hover:text-green-600"
-                                            title="Comprar todos los materiales de esta actividad"
+                                            className={`p-2 rounded-md transition-all flex items-center gap-1 ${
+                                                activity.materialsPurchased 
+                                                    ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border border-emerald-200 shadow-sm' 
+                                                    : 'text-slate-500 hover:text-green-600 hover:bg-slate-50'
+                                            }`}
+                                            title={activity.materialsPurchased ? "Materiales ya comprados para esta actividad (Volver a comprar)" : "Comprar todos los materiales de esta actividad"}
                                         >
                                             <ShoppingCartIcon className="h-5 w-5"/>
+                                            {activity.materialsPurchased && <span className="text-[10px] font-bold hidden sm:inline">Comprado</span>}
                                         </button>
                                         <button onClick={() => {
                                             const customActivity = activity.type === ActivityType.CUSTOM_MATERIAL_CALCULATION
                                                 ? libraryData?.custom_material_activities.find((ca: CustomMaterialActivity) => ca.id === activity.inputs.customActivityId)
                                                 : undefined;
                                             handleOpenActivityModal(activity.type, activity, customActivity);
-                                        }} className="p-2 text-slate-500 hover:text-cyan-600"><PencilIcon className="h-5 w-5"/></button>
-                                        <button onClick={() => handleOpenDeleteModal('activity', activity.id!)} className="p-2 text-slate-500 hover:text-red-600"><TrashIcon className="h-5 w-5"/></button>
+                                        }} className="p-2 text-slate-500 hover:text-cyan-600 hover:bg-slate-50 rounded-md"><PencilIcon className="h-5 w-5"/></button>
+                                        <button onClick={() => handleOpenDeleteModal('activity', activity.id!)} className="p-2 text-slate-500 hover:text-red-600 hover:bg-slate-50 rounded-md"><TrashIcon className="h-5 w-5"/></button>
                                     </div>
                                 </div>
                                 <details className="mt-3">
@@ -3749,6 +3904,8 @@ export const ProjectManager: React.FC = () => {
                 isOpen={isBuyAllModalOpen}
                 onClose={() => setIsBuyAllModalOpen(false)}
                 activity={activityToBuy}
+                inventoryItems={inventoryItems}
+                materialPrices={materialPrices}
                 onConfirm={handleConfirmBuyAll}
             />
 

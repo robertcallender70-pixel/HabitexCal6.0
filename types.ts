@@ -46,6 +46,7 @@ export interface Activity {
     name: string;
     inputs: Record<string, any>;
     results: Material[];
+    materialsPurchased?: boolean;
 }
 
 export interface Material {
