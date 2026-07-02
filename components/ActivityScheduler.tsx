@@ -364,6 +364,121 @@ export default function ActivityScheduler({
         return segments;
     };
 
+    const workforceDays = React.useMemo(() => {
+        if (!sortedScheduleList.length) return [];
+        
+        const days: Array<{
+            date: Date;
+            dateStr: string;
+            dayName: string;
+            isWorkingDay: boolean;
+            workers: number;
+            activeTasks: Array<{ name: string; workers: number }>;
+        }> = [];
+
+        const projectStart = scheduleData.startDate;
+        const projectEnd = scheduleData.endDate;
+        const startTimestamp = projectStart.getTime();
+        const endTimestamp = projectEnd.getTime();
+        const oneDayMs = 1000 * 60 * 60 * 24;
+
+        for (let t = startTimestamp; t <= endTimestamp; t += oneDayMs) {
+            const currentDay = new Date(t);
+            const dateStr = currentDay.toISOString().slice(0, 10);
+            
+            const day = currentDay.getDay();
+            const isSaturday = day === 6;
+            const isSunday = day === 0;
+            const isWorkingDay = !((isSaturday && !!project.excludeSaturdays) || (isSunday && !!project.excludeSundays));
+
+            const activeTasksOnDay = sortedScheduleList.filter(item => {
+                const s = new Date(item.startDate);
+                s.setHours(0,0,0,0);
+                const e = new Date(item.endDate);
+                e.setHours(0,0,0,0);
+                const curr = new Date(currentDay);
+                curr.setHours(0,0,0,0);
+                return curr >= s && curr <= e;
+            });
+
+            const workers = activeTasksOnDay.reduce((acc, item) => acc + item.workers, 0);
+
+            days.push({
+                date: currentDay,
+                dateStr,
+                dayName: currentDay.toLocaleDateString('es-ES', { weekday: 'short' }),
+                isWorkingDay,
+                workers,
+                activeTasks: activeTasksOnDay.map(t => ({ name: t.laborItem.name, workers: t.workers }))
+            });
+        }
+        return days;
+    }, [sortedScheduleList, scheduleData.startDate, scheduleData.endDate, project.excludeSaturdays, project.excludeSundays]);
+
+    const peakDates = React.useMemo(() => {
+        if (!workforceDays.length) return [];
+        const maxW = scheduleData.maxWorkers;
+        if (maxW === 0) return [];
+        return workforceDays.filter(d => d.workers === maxW && d.isWorkingDay);
+    }, [workforceDays, scheduleData.maxWorkers]);
+
+    const scheduleAlerts = React.useMemo(() => {
+        const alerts: string[] = [];
+        if (workforceDays.length < 3) return alerts;
+
+        let lastActiveDayIdx = -1;
+        let firstActiveDayIdx = -1;
+        for (let i = 0; i < workforceDays.length; i++) {
+            if (workforceDays[i].workers > 0) {
+                if (firstActiveDayIdx === -1) firstActiveDayIdx = i;
+                lastActiveDayIdx = i;
+            }
+        }
+
+        if (firstActiveDayIdx !== -1 && lastActiveDayIdx !== -1) {
+            // Check for gaps (0 workers on a working day between first and last active days)
+            let gapDaysCount = 0;
+            const gapRanges: string[] = [];
+            let inGap = false;
+            let gapStart: Date | null = null;
+
+            for (let i = firstActiveDayIdx; i <= lastActiveDayIdx; i++) {
+                const day = workforceDays[i];
+                if (day.isWorkingDay && day.workers === 0) {
+                    gapDaysCount++;
+                    if (!inGap) {
+                        inGap = true;
+                        gapStart = day.date;
+                    }
+                } else if (day.workers > 0 && inGap) {
+                    inGap = false;
+                    if (gapStart) {
+                        const startLabel = gapStart.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+                        const endLabel = workforceDays[i - 1].date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+                        gapRanges.push(startLabel === endLabel ? startLabel : `del ${startLabel} al ${endLabel}`);
+                    }
+                }
+            }
+
+            if (gapDaysCount > 0) {
+                alerts.push(`Se detectan lapsos de inactividad (${gapDaysCount} días sin labores) ${gapRanges.join(', ')}. Considere reorganizar las dependencias de las tareas para que el personal tenga continuidad laboral y evitar costos innecesarios.`);
+            }
+        }
+
+        if (scheduleData.maxWorkers > scheduleData.avgWorkers * 1.8 && scheduleData.avgWorkers > 0) {
+            alerts.push(`El pico máximo de personal (${scheduleData.maxWorkers} obreros) supera considerablemente el promedio diario (${scheduleData.avgWorkers} obreros). Esto indica una alta concentración de actividades paralelas. Considere encadenar algunas tareas mediante predecesoras para nivelar el personal en obra.`);
+        }
+
+        return alerts;
+    }, [workforceDays, scheduleData.maxWorkers, scheduleData.avgWorkers]);
+
+    const [selectedWorkforceDayStr, setSelectedWorkforceDayStr] = React.useState<string | null>(null);
+
+    const selectedWorkforceDay = React.useMemo(() => {
+        if (!selectedWorkforceDayStr) return null;
+        return workforceDays.find(d => d.dateStr === selectedWorkforceDayStr) || null;
+    }, [workforceDays, selectedWorkforceDayStr]);
+
     return (
         <div className="space-y-6">
             {/* Informative Guidance Section */}
@@ -468,8 +583,9 @@ export default function ActivityScheduler({
                         </svg>
                     </div>
                     <div>
-                        <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Obreros Activos Prom.</p>
-                        <h4 className="text-2xl font-bold text-slate-800">{scheduleData.avgWorkers} <span className="text-sm font-medium text-slate-500">en promedio</span></h4>
+                        <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Obreros Requeridos</p>
+                        <h4 className="text-2xl font-bold text-slate-800">{scheduleData.avgWorkers} <span className="text-sm font-medium text-slate-500">promedio</span></h4>
+                        <p className="text-[11px] font-bold text-purple-750 mt-1">Pico máximo: {scheduleData.maxWorkers} {scheduleData.maxWorkers === 1 ? 'obrero' : 'obreros'}</p>
                     </div>
                 </div>
 
@@ -722,6 +838,168 @@ export default function ActivityScheduler({
                                     </div>
                                 );
                             })}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Parallel Crew & Overlap Analysis Module */}
+            <div className="bg-white rounded-2xl border border-slate-200/65 shadow-sm overflow-hidden">
+                <div className="p-5 border-b border-slate-200/60 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-2">
+                    <div>
+                        <h3 className="font-bold text-slate-800 text-lg">Análisis de Cuadrillas y Continuidad</h3>
+                        <p className="text-xs text-slate-550">Detección automática de solapamientos de tareas en paralelo y brechas de inactividad</p>
+                    </div>
+                    {peakDates.length > 0 && (
+                        <div className="bg-purple-50 text-purple-700 border border-purple-100 rounded-lg px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 self-start md:self-auto">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                            Pico Máximo: <span className="font-bold">{scheduleData.maxWorkers} obreros</span> el {peakDates[0].date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                            {peakDates.length > 1 && ` (+${peakDates.length - 1} días)`}
+                        </div>
+                    )}
+                </div>
+
+                <div className="p-5 grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    {/* Diagnostic column */}
+                    <div className="lg:col-span-5 space-y-4">
+                        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Diagnóstico de la Obra</h4>
+                        
+                        {scheduleAlerts.length > 0 ? (
+                            <div className="space-y-3">
+                                {scheduleAlerts.map((alert, idx) => (
+                                    <div key={idx} className="p-3.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs sm:text-sm flex items-start gap-3 shadow-xs">
+                                        <span className="text-lg leading-none mt-0.5">⚠️</span>
+                                        <div>
+                                            <p className="font-semibold leading-relaxed text-slate-750">{alert}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="p-4 bg-emerald-50 border border-emerald-100 text-emerald-850 rounded-xl text-xs sm:text-sm flex items-start gap-3 shadow-xs">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <div>
+                                    <h5 className="font-bold">Distribución de personal óptima</h5>
+                                    <p className="text-emerald-700 mt-1 leading-relaxed">Las actividades están encadenadas continuamente. No se detectan baches de inactividad ni picos excesivos de personal que compliquen la administración en la obra.</p>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-150 text-xs text-slate-650 space-y-2">
+                            <span className="font-bold text-slate-700 block uppercase tracking-wider text-[10px]">¿Cómo optimizar su cuadrilla?</span>
+                            <p className="leading-relaxed">
+                                Si el pico máximo de personal es muy alto, significa que hay tareas paralelas demandando trabajadores al mismo tiempo. Puede <strong>modificar las predecesoras</strong> en la tabla de abajo para hacerlas secuenciales. Esto reduce el tamaño de cuadrilla requerido en simultáneo, facilitando la administración de la obra.
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Interactive Histogram and Detail Column */}
+                    <div className="lg:col-span-7 flex flex-col justify-between space-y-4">
+                        <div>
+                            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex justify-between items-center">
+                                <span>Demanda Diaria de Personal (Histograma)</span>
+                                <span className="text-[10px] text-slate-400 font-normal">Haga clic en un día para ver detalles</span>
+                            </h4>
+                            
+                            {/* Simple, scrollable daily histogram */}
+                            <div className="border border-slate-150 rounded-xl bg-slate-50/30 p-4 overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200">
+                                <div className="flex items-end gap-1.5 h-28 min-w-[350px] pb-1">
+                                    {workforceDays.map((day) => {
+                                        const isSelected = selectedWorkforceDayStr === day.dateStr;
+                                        const isPeak = day.workers === scheduleData.maxWorkers && day.isWorkingDay;
+                                        const maxW = scheduleData.maxWorkers || 1;
+                                        const heightPercent = Math.max(8, (day.workers / maxW) * 100);
+                                        const barHeight = day.isWorkingDay ? `${heightPercent}%` : '15%';
+
+                                        let barColor = 'bg-slate-350 hover:bg-slate-400';
+                                        if (day.isWorkingDay) {
+                                            if (day.workers === 0) {
+                                                barColor = 'bg-slate-100 border border-dashed border-slate-300';
+                                            } else if (isPeak) {
+                                                barColor = 'bg-purple-600 hover:bg-purple-700 ring-2 ring-purple-100 ring-offset-1';
+                                            } else if (day.workers > scheduleData.avgWorkers) {
+                                                barColor = 'bg-cyan-600 hover:bg-cyan-700';
+                                            } else {
+                                                barColor = 'bg-cyan-500 hover:bg-cyan-600';
+                                            }
+                                        } else {
+                                            barColor = 'bg-slate-200/60 hover:bg-slate-200';
+                                        }
+
+                                        if (isSelected) {
+                                            barColor = 'bg-indigo-600 hover:bg-indigo-700 ring-4 ring-indigo-100 ring-offset-1 scale-y-105 transition-all';
+                                        }
+
+                                        return (
+                                            <button
+                                                key={day.dateStr}
+                                                type="button"
+                                                onClick={() => setSelectedWorkforceDayStr(isSelected ? null : day.dateStr)}
+                                                className="flex-1 flex flex-col items-center justify-end h-full min-w-[20px] group focus:outline-none transition-all duration-200"
+                                                title={`${day.date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}: ${day.workers} obreros${!day.isWorkingDay ? ' (No laborable)' : ''}`}
+                                            >
+                                                {/* Bar */}
+                                                <div 
+                                                    className={`w-full rounded-md transition-all duration-200 ${barColor}`}
+                                                    style={{ height: barHeight }}
+                                                />
+                                                {/* Label */}
+                                                <span className={`text-[9px] mt-2 font-bold select-none ${isSelected ? 'text-indigo-600 font-extrabold' : 'text-slate-450'}`}>
+                                                    {day.date.getDate()}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Selected day active parallel activities breakdown */}
+                        <div className="flex-1 min-h-[100px]">
+                            {selectedWorkforceDay ? (
+                                <div className="p-4 bg-indigo-50/50 border border-indigo-100 rounded-xl space-y-2.5 animate-fadeIn">
+                                    <div className="flex justify-between items-center border-b border-indigo-100/60 pb-2">
+                                        <h5 className="font-bold text-slate-850 text-xs sm:text-sm">
+                                            Detalles del {selectedWorkforceDay.date.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
+                                        </h5>
+                                        <span className="px-2.5 py-0.5 bg-indigo-100 text-indigo-800 rounded-full text-xs font-bold">
+                                            {selectedWorkforceDay.workers} {selectedWorkforceDay.workers === 1 ? 'obrero' : 'obreros'} activos
+                                        </span>
+                                    </div>
+                                    {selectedWorkforceDay.activeTasks.length > 0 ? (
+                                        <div className="space-y-1.5">
+                                            <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Actividades en Paralelo:</p>
+                                            <ul className="space-y-1.5">
+                                                {selectedWorkforceDay.activeTasks.map((task, tIdx) => (
+                                                    <li key={tIdx} className="text-xs text-slate-700 flex justify-between items-center bg-white px-3 py-1.5 rounded-lg border border-indigo-50 shadow-2xs">
+                                                        <span className="font-bold text-slate-850 truncate mr-2">
+                                                            {task.name}
+                                                        </span>
+                                                        <span className="font-semibold text-slate-500 text-[10px] bg-slate-100 px-2 py-0.5 rounded shrink-0">
+                                                            {task.workers} {task.workers === 1 ? 'obrero' : 'obreros'}
+                                                        </span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    ) : (
+                                        <p className="text-xs text-slate-500 italic">No hay actividades de mano de obra programadas para este día.</p>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="h-full flex items-center justify-center p-4 border border-dashed border-slate-200 rounded-xl bg-slate-50/20 text-center">
+                                    <div className="space-y-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-400 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+                                        </svg>
+                                        <p className="text-xs text-slate-400 font-medium">Toque una barra del histograma para analizar los solapamientos de ese día.</p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

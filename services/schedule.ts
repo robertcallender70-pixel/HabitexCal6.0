@@ -78,6 +78,7 @@ export interface ScheduleMetrics {
     maxWorkers: number;
     scheduleItems: Record<number, ScheduleItem>;
     remainingScheduleItems: Record<number, ScheduleItem>;
+    dailyWorkers?: { date: string, workers: number }[];
 }
 
 export function getNextWorkingDate(date: Date, excludeSaturdays: boolean, excludeSundays: boolean): Date {
@@ -361,10 +362,13 @@ export function calculateSchedule(
 
     // Worker Metrics
     const totalWorkersAssigned = initialSpecs.reduce((acc, s) => acc + s.workers, 0);
-    const avgWorkers = initialSpecs.length > 0 ? Number((totalWorkersAssigned / initialSpecs.length).toFixed(1)) : 0;
-
-    // Peak workers calculation (max workers scheduled on any single day)
+    
+    // Peak workers and precise daily workforce tracking
     let maxWorkers = 0;
+    let totalWorkersOnWorkingDays = 0;
+    let workingDaysCount = 0;
+    const dailyWorkers: { date: string, workers: number }[] = [];
+
     if (initialSpecs.length > 0) {
         // Find date range of initial schedule
         const startTimestamp = earliestStart.getTime();
@@ -373,17 +377,34 @@ export function calculateSchedule(
         
         for (let t = startTimestamp; t <= endTimestamp; t += oneDayMs) {
             const currentDay = new Date(t);
+            const dateStr = currentDay.toISOString().slice(0, 10);
+            const day = currentDay.getDay();
+            const isSunday = day === 0;
+            const isSaturday = day === 6;
+            
             let workersOnDay = 0;
             for (const item of Object.values(initialSchedule)) {
                 if (item.startDate <= currentDay && currentDay <= item.endDate) {
                     workersOnDay += item.workers;
                 }
             }
-            if (workersOnDay > maxWorkers) {
-                maxWorkers = workersOnDay;
+            
+            dailyWorkers.push({
+                date: dateStr,
+                workers: workersOnDay
+            });
+
+            if (!(isSunday && excludeSundays) && !(isSaturday && excludeSaturdays)) {
+                workingDaysCount++;
+                totalWorkersOnWorkingDays += workersOnDay;
+                if (workersOnDay > maxWorkers) {
+                    maxWorkers = workersOnDay;
+                }
             }
         }
     }
+
+    const avgWorkers = workingDaysCount > 0 ? Number((totalWorkersOnWorkingDays / workingDaysCount).toFixed(1)) : 0;
 
     return {
         totalDurationDays: totalWorkingDays, // legacy map to working days
@@ -396,6 +417,7 @@ export function calculateSchedule(
         avgWorkers,
         maxWorkers: maxWorkers || totalWorkersAssigned,
         scheduleItems: initialSchedule,
-        remainingScheduleItems: remainingSchedule
+        remainingScheduleItems: remainingSchedule,
+        dailyWorkers
     };
 }
