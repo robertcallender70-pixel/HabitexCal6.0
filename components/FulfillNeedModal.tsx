@@ -11,6 +11,29 @@ interface FulfillNeedModalProps {
     onConfirm: (usageData: Record<string, number>) => void;
 }
 
+const parseLocalDate = (dateVal: string | Date | undefined | null): Date => {
+    if (!dateVal) return new Date();
+    if (dateVal instanceof Date) {
+        return dateVal;
+    }
+    if (typeof dateVal === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateVal)) {
+        const [year, month, day] = dateVal.split('-').map(Number);
+        return new Date(year, month - 1, day);
+    }
+    if (typeof dateVal === 'string' && dateVal.includes('T')) {
+        const datePart = dateVal.split('T')[0];
+        if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+            const [year, month, day] = datePart.split('-').map(Number);
+            return new Date(year, month - 1, day);
+        }
+    }
+    const d = new Date(dateVal);
+    if (!isNaN(d.getTime())) {
+        return d;
+    }
+    return new Date();
+};
+
 const FulfillNeedModal: React.FC<FulfillNeedModalProps> = ({ isOpen, onClose, materialToFulfill, inventoryItems, onConfirm }) => {
     const [usage, setUsage] = React.useState<Record<string, string>>({});
 
@@ -45,7 +68,7 @@ const FulfillNeedModal: React.FC<FulfillNeedModalProps> = ({ isOpen, onClose, ma
             const available = Number(item.quantityPurchased) - Number(item.quantityUsed);
 
             if (isNaN(usedNum) || usedNum < 0 || usedNum > available) {
-                alert(`Cantidad inválida para el item comprado el ${new Date(item.dateAdded).toLocaleDateString()}. Disponible: ${available}`);
+                alert(`Cantidad inválida para el item comprado el ${parseLocalDate(item.dateAdded).toLocaleDateString()}. Disponible: ${available}`);
                 return;
             }
             if (usedNum > 0) {
@@ -85,7 +108,7 @@ const FulfillNeedModal: React.FC<FulfillNeedModalProps> = ({ isOpen, onClose, ma
                             return (
                                 <div key={item.id} className="grid grid-cols-3 gap-4 items-center">
                                     <div className="col-span-1">
-                                        <p className="font-medium text-sm">Comprado: {new Date(item.dateAdded).toLocaleDateString()}</p>
+                                        <p className="font-medium text-sm">Comprado: {parseLocalDate(item.dateAdded).toLocaleDateString()}</p>
                                         <p className="text-xs text-slate-500">Disponible: {available.toLocaleString()}</p>
                                     </div>
                                     <div className="col-span-2">

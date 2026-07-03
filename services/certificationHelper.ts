@@ -116,7 +116,8 @@ export const calculateCertificationSnapshot = (
 export const calculateConsolidatedCertificationSnapshot = async (
     parentProject: Project,
     allProjects: Project[],
-    parentPreviousSnapshot: CertificationSnapshot | null
+    parentPreviousSnapshot: CertificationSnapshot | null,
+    totalBudgetAtCertification: number
 ): Promise<CertificationSnapshot> => {
     const childProjects = allProjects.filter(p => p.parentId === parentProject.id);
     const childIncrements: CertificationChildIncrement[] = [];
@@ -183,8 +184,17 @@ export const calculateConsolidatedCertificationSnapshot = async (
     const prevCumulativeDeduction = parentPreviousSnapshot?.cumulativeAnticipoDeducted || 0;
     const remainingToAmortize = Math.max(0, totalParentAnticipo - prevCumulativeDeduction);
     
-    const anticipoDeduction = Math.min(incrementalValue, remainingToAmortize);
-    const finalBillableAmount = incrementalValue - anticipoDeduction;
+    // Proportional amortization factor for consolidated parent projects
+    const amortizationFactor = totalBudgetAtCertification > 0 
+        ? totalParentAnticipo / totalBudgetAtCertification 
+        : 0;
+
+    const anticipoDeduction = Math.min(
+        incrementalValue * amortizationFactor, 
+        remainingToAmortize, 
+        Math.max(0, incrementalValue)
+    );
+    const finalBillableAmount = Math.max(0, incrementalValue - anticipoDeduction);
 
     if (anticipoDeduction > 0 && incrementalValue > 0) {
         childIncrements.forEach(ci => {
@@ -214,8 +224,8 @@ export const calculateConsolidatedCertificationSnapshot = async (
         serviceTaxCost: consolidatedServiceTaxCost,
         grandTotal: consolidatedGrandTotal,
         totalAnticipoAtCertification: totalParentAnticipo,
-        totalBudgetAtCertification: 0,
-        anticipoPercentage: 0,
+        totalBudgetAtCertification: totalBudgetAtCertification,
+        anticipoPercentage: amortizationFactor * 100,
         incrementalValue,
         anticipoDeduction,
         finalBillableAmount,

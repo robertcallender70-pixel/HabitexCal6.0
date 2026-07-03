@@ -12,6 +12,29 @@ import { TransactionType } from '../types';
 
 declare const jspdf: any;
 
+export const parseLocalDate = (dateVal: string | Date | undefined | null): Date => {
+    if (!dateVal) return new Date();
+    if (dateVal instanceof Date) {
+        return dateVal;
+    }
+    if (typeof dateVal === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateVal)) {
+        const [year, month, day] = dateVal.split('-').map(Number);
+        return new Date(year, month - 1, day);
+    }
+    if (typeof dateVal === 'string' && dateVal.includes('T')) {
+        const datePart = dateVal.split('T')[0];
+        if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+            const [year, month, day] = datePart.split('-').map(Number);
+            return new Date(year, month - 1, day);
+        }
+    }
+    const d = new Date(dateVal);
+    if (!isNaN(d.getTime())) {
+        return d;
+    }
+    return new Date();
+};
+
 // --- Helper: Draw outstanding Metric Tiles ---
 const drawMetricCard = (
     doc: any, 
@@ -253,7 +276,7 @@ export const exportProjectToPDF = (
             startY: 25,
             head: [['Fecha', 'Tipo', 'Descripción / Concepto', 'Categoría', 'Monto Real', 'Equivalente (CUP/MN)']],
             body: transactions.map(t => [
-                new Date(t.date).toLocaleDateString(),
+                parseLocalDate(t.date).toLocaleDateString(),
                 t.type === TransactionType.INCOME ? 'INGRESO' : 'EFECTIVADO',
                 t.description,
                 t.category || '-',
@@ -366,13 +389,13 @@ export const exportScheduleToPDF = (
     const { jsPDF } = jspdf;
     const doc = new jsPDF('l', 'mm', 'a4');
 
-    const scheduleList = [...scheduleItems].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+    const scheduleList = [...scheduleItems].sort((a, b) => parseLocalDate(a.startDate).getTime() - parseLocalDate(b.startDate).getTime());
 
     let minDate = new Date();
     let maxDate = new Date();
     if (scheduleList.length > 0) {
-        minDate = new Date(Math.min(...scheduleList.map(item => new Date(item.startDate).getTime())));
-        maxDate = new Date(Math.max(...scheduleList.map(item => new Date(item.endDate).getTime())));
+        minDate = parseLocalDate(Math.min(...scheduleList.map(item => parseLocalDate(item.startDate).getTime())));
+        maxDate = parseLocalDate(Math.max(...scheduleList.map(item => parseLocalDate(item.endDate).getTime())));
     }
 
     const calendarDays = Math.max(1, Math.ceil((maxDate.getTime() - minDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
@@ -416,8 +439,8 @@ export const exportScheduleToPDF = (
         head: [['Actividad / Tarea de Mano de Obra', 'Inicio', 'Fin', 'Duración (días hábiles)']],
         body: scheduleList.map(item => [
             item.laborItem.name,
-            new Date(item.startDate).toLocaleDateString('es-ES'),
-            new Date(item.endDate).toLocaleDateString('es-ES'),
+            parseLocalDate(item.startDate).toLocaleDateString('es-ES'),
+            parseLocalDate(item.endDate).toLocaleDateString('es-ES'),
             `${item.durationDays} días`
         ]),
         foot: [['Total de Días de Mano de Obra', '', '', `${sumOfDurationDays} días hábiles`]],
@@ -544,8 +567,8 @@ export const exportScheduleToPDF = (
 
             // Calculate precise bar sizing
             const totalProjectDays = (ganttEndDate.getTime() - ganttStartDate.getTime()) / (1000 * 60 * 60 * 24) + 1;
-            const startDiffDays = (new Date(item.startDate).getTime() - ganttStartDate.getTime()) / (1000 * 60 * 60 * 24);
-            const endDiffDays = (new Date(item.endDate).getTime() - ganttStartDate.getTime()) / (1000 * 60 * 60 * 24) + 1;
+            const startDiffDays = (parseLocalDate(item.startDate).getTime() - ganttStartDate.getTime()) / (1000 * 60 * 60 * 24);
+            const endDiffDays = (parseLocalDate(item.endDate).getTime() - ganttStartDate.getTime()) / (1000 * 60 * 60 * 24) + 1;
 
             const xBarStart = 84 + (startDiffDays / totalProjectDays) * 199;
             const xBarEnd = 84 + (endDiffDays / totalProjectDays) * 199;
@@ -670,11 +693,11 @@ export const exportInvoiceToPDF = (data: InvoiceData): Blob => {
     doc.text('Fecha Factura:', 140, y);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100, 116, 139);
-    doc.text(new Date(invoiceInfo.date).toLocaleDateString(), 196, y, { align: 'right' });
+    doc.text(parseLocalDate(invoiceInfo.date).toLocaleDateString(), 196, y, { align: 'right' });
     y += 5.5;
 
     // Explicit Due Date Calculation (Default to 15 Days payment term)
-    const issueDate = new Date(invoiceInfo.date);
+    const issueDate = parseLocalDate(invoiceInfo.date);
     const dueDate = new Date(issueDate.getTime() + 15 * 24 * 60 * 60 * 1000);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(51, 65, 85);
@@ -931,7 +954,7 @@ const generateOfferPDFBase = (doc: any, data: OfferData) => {
     doc.text('Fecha Propuesta:', 140, y);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100, 116, 139);
-    doc.text(new Date(offerInfo.date).toLocaleDateString(), 196, y, { align: 'right' });
+    doc.text(parseLocalDate(offerInfo.date).toLocaleDateString(), 196, y, { align: 'right' });
     y += 5.5;
 
     doc.setFont('helvetica', 'bold');

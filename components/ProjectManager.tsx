@@ -82,6 +82,29 @@ const ArrowPathIcon = (props: any) => (
     </svg>
 );
 
+export const parseLocalDate = (dateVal: string | Date | undefined | null): Date => {
+    if (!dateVal) return new Date();
+    if (dateVal instanceof Date) {
+        return dateVal;
+    }
+    if (typeof dateVal === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateVal)) {
+        const [year, month, day] = dateVal.split('-').map(Number);
+        return new Date(year, month - 1, day);
+    }
+    if (typeof dateVal === 'string' && dateVal.includes('T')) {
+        const datePart = dateVal.split('T')[0];
+        if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+            const [year, month, day] = datePart.split('-').map(Number);
+            return new Date(year, month - 1, day);
+        }
+    }
+    const d = new Date(dateVal);
+    if (!isNaN(d.getTime())) {
+        return d;
+    }
+    return new Date();
+};
+
 const BudgetProgressBar = ({ current, total, formatCurrency }: { current: number, total: number, formatCurrency: (val: number) => string }) => {
     const progress = total > 0 ? (current / total) * 100 : 0;
     const isOver = progress > 100.01;
@@ -210,6 +233,12 @@ export const ProjectManager: React.FC = () => {
 
     const [isBuyAllModalOpen, setIsBuyAllModalOpen] = React.useState(false);
     const [activityToBuy, setActivityToBuy] = React.useState<Activity | null>(null);
+
+    const [isResetConfirmModalOpen, setIsResetConfirmModalOpen] = React.useState(false);
+    const [activityToReset, setActivityToReset] = React.useState<Activity | null>(null);
+
+    const [isUnpayConfirmModalOpen, setIsUnpayConfirmModalOpen] = React.useState(false);
+    const [certificationToUnpay, setCertificationToUnpay] = React.useState<Certification | null>(null);
 
     const [isFullInvoiceConfirmModalOpen, setIsFullInvoiceConfirmModalOpen] = React.useState(false);
 
@@ -922,6 +951,20 @@ export const ProjectManager: React.FC = () => {
                 return;
             }
         }
+        if (type === 'certification') {
+            const cert = certifications.find(c => c.id === id);
+            if (cert && cert.paymentTransactionId) {
+                alert("No se puede eliminar una certificación que ya está cobrada. Primero debe desmarcarla como cobrada en la pestaña de Certificaciones.");
+                return;
+            }
+            // Check if it's a past certification (not the latest)
+            const sortedCerts = [...certifications].sort((a, b) => parseLocalDate(a.certifiedAt).getTime() - parseLocalDate(b.certifiedAt).getTime());
+            const latestCert = sortedCerts[sortedCerts.length - 1];
+            if (latestCert && latestCert.id !== id) {
+                alert("No se puede eliminar una certificación pasada. Solo puede eliminar la última certificación creada.");
+                return;
+            }
+        }
 
         setItemToDelete({ type, id });
         setDeleteAssociatedData(true);
@@ -931,6 +974,33 @@ export const ProjectManager: React.FC = () => {
     const handleOpenBuyAllModal = (activity: Activity) => {
         setActivityToBuy(activity);
         setIsBuyAllModalOpen(true);
+    };
+
+    const handleConfirmResetPurchase = async () => {
+        if (!activityToReset) return;
+        try {
+            await updateActivity({ ...activityToReset, materialsPurchased: false });
+            await loadProjectData();
+        } catch (error) {
+            console.error("Failed to reset purchase status:", error);
+        } finally {
+            closeModals();
+        }
+    };
+
+    const handleConfirmUnpayCertification = async () => {
+        if (!certificationToUnpay) return;
+        try {
+            if (certificationToUnpay.paymentTransactionId) {
+                await deleteTransaction(certificationToUnpay.paymentTransactionId, true);
+            }
+            await updateCertification({ ...certificationToUnpay, paymentTransactionId: undefined });
+            await loadProjectData();
+        } catch (error) {
+            console.error("Failed to unmark certification as paid:", error);
+        } finally {
+            closeModals();
+        }
     };
     
     const handleConfirmDelete = async () => {
@@ -956,6 +1026,10 @@ export const ProjectManager: React.FC = () => {
         } else if (itemToDelete.type === 'inventory') {
             await deleteInventoryItem(itemToDelete.id);
         } else if (itemToDelete.type === 'certification') {
+            const certToDelete = certifications.find(c => c.id === itemToDelete.id);
+            if (certToDelete?.paymentTransactionId) {
+                await deleteTransaction(certToDelete.paymentTransactionId, true);
+            }
             await deleteCertification(itemToDelete.id);
         }
         
@@ -998,6 +1072,8 @@ export const ProjectManager: React.FC = () => {
         setIsCertificationModalOpen(false);
         setIsAdvanceInvoiceModalOpen(false); // NEW
         setIsBuyAllModalOpen(false);
+        setIsResetConfirmModalOpen(false);
+        setIsUnpayConfirmModalOpen(false);
         setIsFullInvoiceConfirmModalOpen(false);
         setIsBulkDeleteModalOpen(false);
 
@@ -1006,6 +1082,8 @@ export const ProjectManager: React.FC = () => {
         setProjectToMove(null);
         setProjectToDuplicate(null);
         setActivityToBuy(null);
+        setActivityToReset(null);
+        setCertificationToUnpay(null);
         setMaterialToFulfill(null);
         setEditingProject(null);
         setEditingActivity(null);
@@ -1750,8 +1828,42 @@ export const ProjectManager: React.FC = () => {
     };
 
     
-    const handleInvoiceGenerated = (updatedCert: Certification) => {
-        setCertifications(prev => prev.map(c => c.id === updatedCert.id ? updatedCert : c));
+    const handleInvoiceGenerated = async (updatedCert: Certification, paymentDate?: string) => {
+        let finalCert = updatedCert;
+        if (selectedProject) {
+            if (paymentDate) {
+                try {
+                    if (updatedCert.paymentTransactionId) {
+                        await deleteTransaction(updatedCert.paymentTransactionId, true);
+                    }
+                    const paymentTx: Omit<Transaction, 'id' | 'projectId'> = {
+                        type: TransactionType.INCOME,
+                        description: `Pago de ${updatedCert.name}`,
+                        amount: updatedCert.snapshot.finalBillableAmount,
+                        date: paymentDate,
+                        category: updatedCert.isAdvance ? 'Anticipo de obra' : 'Pago por certificación',
+                    };
+                    const txId = await addTransaction({ ...paymentTx, projectId: selectedProject.id! });
+                    finalCert = { ...updatedCert, paymentTransactionId: txId };
+                    await updateCertification(finalCert);
+                } catch (error) {
+                    console.error("Failed to register invoice payment:", error);
+                    alert("La factura se generó pero no se pudo registrar el pago automático.");
+                }
+            } else {
+                if (updatedCert.paymentTransactionId) {
+                    try {
+                        await deleteTransaction(updatedCert.paymentTransactionId, true);
+                        finalCert = { ...updatedCert, paymentTransactionId: undefined };
+                        await updateCertification(finalCert);
+                    } catch (error) {
+                        console.error("Failed to delete old transaction when unmarking paid:", error);
+                    }
+                }
+            }
+        }
+        setCertifications(prev => prev.map(c => c.id === finalCert.id ? finalCert : c));
+        await loadProjectData();
         closeModals();
     };
 
@@ -1977,10 +2089,37 @@ export const ProjectManager: React.FC = () => {
         });
     };
 
+    const isTransactionLocked = React.useCallback((tDateStr: string, tId?: number) => {
+        if (!certifications || certifications.length === 0) return false;
+        
+        // Is this a payment transaction for any certification?
+        const isPayment = certifications.some(c => c.paymentTransactionId === tId);
+        if (isPayment) {
+            return true;
+        }
+
+        const sorted = [...certifications].sort((a, b) => parseLocalDate(a.certifiedAt).getTime() - parseLocalDate(b.certifiedAt).getTime());
+        const latest = sorted[sorted.length - 1];
+        const past = sorted.slice(0, sorted.length - 1);
+
+        const txTime = parseLocalDate(tDateStr).getTime();
+
+        // Locked if in past certs
+        const inPast = past.some(c => txTime <= parseLocalDate(c.certifiedAt).getTime());
+        if (inPast) return true;
+
+        // Locked if in latest cert AND latest cert is paid
+        const latestPaid = latest && !!latest.paymentTransactionId;
+        if (latestPaid && txTime <= parseLocalDate(latest.certifiedAt).getTime()) {
+            return true;
+        }
+
+        return false;
+    }, [certifications]);
+
     const unlockedTransactions = React.useMemo(() => transactions.filter(t => {
-        const isLocked = lastCertificationDate && (new Date(t.date).getTime() <= lastCertificationDate.getTime());
-        return !isLocked;
-    }), [transactions, lastCertificationDate]);
+        return !isTransactionLocked(t.date, t.id);
+    }), [transactions, isTransactionLocked]);
 
     const handleSelectAllTransactions = () => {
         const allSelected = unlockedTransactions.length > 0 && unlockedTransactions.every(t => selectedTransactionIds.has(t.id!));
@@ -2202,7 +2341,7 @@ export const ProjectManager: React.FC = () => {
                                     {isParent ? <FolderIcon className="h-6 w-6 text-cyan-700 flex-shrink-0" /> : <DocumentIcon className="h-6 w-6 text-slate-500 flex-shrink-0" />}
                                     <div className="flex-grow">
                                         <h3 className="text-lg font-semibold text-cyan-700 cursor-pointer" onClick={() => handleSelectProject(project)}>{project.name}</h3>
-                                        <p className="text-sm text-slate-500">Creado: {new Date(project.createdAt).toLocaleDateString()}</p>
+                                        <p className="text-sm text-slate-500">Creado: {parseLocalDate(project.createdAt).toLocaleDateString()}</p>
                                     </div>
                                 </div>
                                 <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-1 mt-2 sm:mt-0">
@@ -2920,7 +3059,7 @@ export const ProjectManager: React.FC = () => {
                             </thead>
                             <tbody className="divide-y divide-slate-100 bg-white">
                                 {transactions.map(item => {
-                                    const isLocked = lastCertificationDate && (new Date(item.date).getTime() <= lastCertificationDate.getTime());
+                                    const isLocked = isTransactionLocked(item.date, item.id);
                                     const rate = getRate(item.projectId);
                                     const displayAmount = displayCurrency === 'CUP' ? item.amount * rate : item.amount;
                                     
@@ -2935,7 +3074,7 @@ export const ProjectManager: React.FC = () => {
                                                 disabled={isLocked}
                                             />
                                         </td>
-                                        <td className="px-4 py-2.5 text-slate-500 font-mono text-xs">{new Date(item.date).toLocaleDateString()}</td>
+                                        <td className="px-4 py-2.5 text-slate-500 font-mono text-xs">{parseLocalDate(item.date).toLocaleDateString()}</td>
                                         <td className="px-4 py-2.5 font-bold text-slate-800">{item.description}</td>
                                         <td className="px-4 py-2.5"><span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2.5 py-1 rounded-lg tracking-wide uppercase">{item.category || 'N/A'}</span></td>
                                         <td className={`px-4 py-2.5 text-right font-black ${item.type === TransactionType.INCOME ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -3078,12 +3217,10 @@ export const ProjectManager: React.FC = () => {
                                     <div className="flex items-center gap-2">
                                         {activity.materialsPurchased && (
                                             <button 
-                                                onClick={async (e) => {
+                                                onClick={(e) => {
                                                     e.stopPropagation();
-                                                    if (confirm("¿Desea restablecer el estado de compra de esta actividad?")) {
-                                                        await updateActivity({ ...activity, materialsPurchased: false });
-                                                        await loadProjectData();
-                                                    }
+                                                    setActivityToReset(activity);
+                                                    setIsResetConfirmModalOpen(true);
                                                 }} 
                                                 className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-slate-100 rounded transition-colors"
                                                 title="Desmarcar como comprado (Restablecer estado)"
@@ -3363,7 +3500,7 @@ export const ProjectManager: React.FC = () => {
                                                                 disabled={isUsed}
                                                             />
                                                         </td>
-                                                        <td className="px-4 py-2">{new Date(item.dateAdded).toLocaleDateString()}</td>
+                                                        <td className="px-4 py-2">{parseLocalDate(item.dateAdded).toLocaleDateString()}</td>
                                                         <td className="px-4 py-2 text-right">{Number(item.quantityPurchased).toLocaleString()} {item.unit}</td>
                                                         <td className="px-4 py-2 text-right">{Number(item.quantityUsed).toLocaleString()} {item.unit}</td>
                                                         <td className="px-4 py-2 text-right font-semibold">{itemAvailable.toLocaleString()} {item.unit}</td>
@@ -3618,7 +3755,7 @@ export const ProjectManager: React.FC = () => {
                                                     <span className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-800 rounded-full font-medium border border-yellow-200">Pendiente</span>
                                                 )}
                                             </div>
-                                            <p className="text-sm text-slate-500">{new Date(cert.certifiedAt).toLocaleDateString()}</p>
+                                            <p className="text-sm text-slate-500">{parseLocalDate(cert.certifiedAt).toLocaleDateString()}</p>
                                         </div>
                                         
                                         <div className="text-right">
@@ -3655,16 +3792,29 @@ export const ProjectManager: React.FC = () => {
                                          {!isPaid && (
                                             <button 
                                                 onClick={() => handleRegisterPayment(cert)}
-                                                className="flex items-center gap-1 px-3 py-1.5 bg-green-50 text-green-700 rounded-md hover:bg-green-100 text-sm"
+                                                className="flex items-center gap-1 px-3 py-1.5 bg-green-50 text-green-700 rounded-md hover:bg-green-100 text-sm font-medium"
                                             >
                                                 <CheckCircleIcon className="h-4 w-4" /> Cobrar Factura
                                             </button>
                                         )}
 
+                                        {isPaid && (
+                                            <button 
+                                                onClick={() => {
+                                                    setCertificationToUnpay(cert);
+                                                    setIsUnpayConfirmModalOpen(true);
+                                                }}
+                                                className="flex items-center gap-1 px-3 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-md text-sm font-medium border border-amber-100"
+                                                title="Desmarcar como cobrada y eliminar transacción"
+                                            >
+                                                <ArrowPathIcon className="h-4 w-4" /> Desmarcar Cobrada
+                                            </button>
+                                        )}
+
                                         <button 
                                             onClick={() => handleOpenDeleteModal('certification', cert.id!)}
-                                            className="p-2 text-slate-400 hover:text-red-700 disabled:opacity-50"
-                                            disabled={isPaid}
+                                            className="p-2 text-slate-400 hover:text-red-700 hover:bg-slate-50 rounded-md transition-colors"
+                                            title="Eliminar Certificación"
                                         >
                                             <TrashIcon className="h-5 w-5" />
                                         </button>
@@ -3683,8 +3833,24 @@ export const ProjectManager: React.FC = () => {
                         totalBudget={totalPlannedUSD}
                         currency={displayCurrency}
                         exchangeRate={selectedProject.exchangeRate || 380}
-                        onSave={async (cert) => {
-                            await addCertification(cert);
+                        onSave={async (cert, paymentDate) => {
+                            const newCertId = await addCertification(cert);
+                            if (paymentDate) {
+                                try {
+                                    const paymentTx: Omit<Transaction, 'id' | 'projectId'> = {
+                                        type: TransactionType.INCOME,
+                                        description: `Pago de ${cert.name}`,
+                                        amount: cert.snapshot.finalBillableAmount,
+                                        date: paymentDate,
+                                        category: 'Anticipo de obra',
+                                    };
+                                    const txId = await addTransaction({ ...paymentTx, projectId: selectedProject.id! });
+                                    const finalCert = { ...cert, id: newCertId, paymentTransactionId: txId };
+                                    await updateCertification(finalCert);
+                                } catch (error) {
+                                    console.error("Failed to register payment on save:", error);
+                                }
+                            }
                             await loadProjectData();
                             setIsAdvanceInvoiceModalOpen(false);
                         }}
@@ -3812,7 +3978,7 @@ export const ProjectManager: React.FC = () => {
                 <div className="space-y-4">
                     <p className="text-slate-600">
                         Item: <strong>{itemToUse?.name}</strong> ({itemToUse?.unit})<br/>
-                        Comprado: {itemToUse?.dateAdded && new Date(itemToUse.dateAdded).toLocaleDateString()}<br/>
+                        Comprado: {itemToUse?.dateAdded && parseLocalDate(itemToUse.dateAdded).toLocaleDateString()}<br/>
                         Disponible: {itemToUse ? (Number(itemToUse.quantityPurchased) - Number(itemToUse.quantityUsed)).toLocaleString() : 0}
                     </p>
                     <div>
@@ -3891,10 +4057,26 @@ export const ProjectManager: React.FC = () => {
                 projectMaterialTotal={materialGrandTotal.usd}
                 projectLaborTotal={laborGrandTotal.usd}
                 projectManualBudgetTotal={manualBudgetGrandTotal.usd}
-                budgetGrandTotal={budgetGrandTotal.usd}
+                budgetGrandTotal={financialSummary.totalBudget.usd}
                 masterAnticipoPercentage={financialSummary.anticipoPercentage}
-                onSave={async (cert) => {
-                    await addCertification(cert);
+                onSave={async (cert, paymentDate) => {
+                    const newCertId = await addCertification(cert);
+                    if (paymentDate) {
+                        try {
+                            const paymentTx: Omit<Transaction, 'id' | 'projectId'> = {
+                                type: TransactionType.INCOME,
+                                description: `Pago de ${cert.name}`,
+                                amount: cert.snapshot.finalBillableAmount,
+                                date: paymentDate,
+                                category: cert.isAdvance ? 'Anticipo de obra' : 'Pago por certificación',
+                            };
+                            const txId = await addTransaction({ ...paymentTx, projectId: selectedProject!.id! });
+                            const finalCert = { ...cert, id: newCertId, paymentTransactionId: txId };
+                            await updateCertification(finalCert);
+                        } catch (error) {
+                            console.error("Failed to register payment on save:", error);
+                        }
+                    }
                     await loadProjectData();
                     setIsCertificationModalOpen(false);
                 }}
@@ -3918,7 +4100,9 @@ export const ProjectManager: React.FC = () => {
                     <p className="text-slate-600">
                         {itemToDelete?.type === 'project' 
                             ? '¿Está seguro de que desea eliminar esta obra principal? Seleccione una de las siguientes opciones:' 
-                            : '¿Está seguro de que desea eliminar este elemento? Esta acción no se puede deshacer.'}
+                            : itemToDelete?.type === 'certification'
+                                ? '¿Está seguro de que desea eliminar esta certificación? Si ya ha sido cobrada, esto también eliminará de forma permanente el cobro registrado en la sección de Finanzas.'
+                                : '¿Está seguro de que desea eliminar este elemento? Esta acción no se puede deshacer.'}
                     </p>
 
                     {itemToDelete?.type === 'project' && (
@@ -4098,6 +4282,61 @@ export const ProjectManager: React.FC = () => {
                             className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50"
                         >
                             Cancelar
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+
+            <Modal
+                isOpen={isResetConfirmModalOpen}
+                onClose={() => setIsResetConfirmModalOpen(false)}
+                title="Restablecer Compra"
+            >
+                <div className="space-y-4">
+                    <p className="text-slate-600">
+                        ¿Está seguro de que desea restablecer el estado de compra de los materiales de la actividad "{activityToReset?.name}"?
+                    </p>
+                    <div className="flex justify-end gap-3 pt-4 border-t">
+                        <button
+                            onClick={() => setIsResetConfirmModalOpen(false)}
+                            className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            onClick={handleConfirmResetPurchase}
+                            className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-md hover:bg-amber-700"
+                        >
+                            Restablecer
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+
+            <Modal
+                isOpen={isUnpayConfirmModalOpen}
+                onClose={() => setIsUnpayConfirmModalOpen(false)}
+                title="Desmarcar Certificación Cobrada"
+            >
+                <div className="space-y-4">
+                    <p className="text-slate-600">
+                        ¿Está seguro de que desea desmarcar la certificación "{certificationToUnpay?.name}" como cobrada?
+                    </p>
+                    <p className="text-slate-500 text-sm">
+                        Esto eliminará de forma permanente la transacción de cobro registrada en la sección de Finanzas, y devolverá la certificación a estado pendiente (permitiéndole regenerarla o eliminarla).
+                    </p>
+                    <div className="flex justify-end gap-3 pt-4 border-t">
+                        <button
+                            onClick={() => setIsUnpayConfirmModalOpen(false)}
+                            className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            onClick={handleConfirmUnpayCertification}
+                            className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-md hover:bg-amber-700 shadow-sm transition-all"
+                        >
+                            Desmarcar Cobrada
                         </button>
                     </div>
                 </div>

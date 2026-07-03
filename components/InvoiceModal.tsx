@@ -26,7 +26,7 @@ interface InvoiceModalProps {
         signerName?: string;
         signerTitle?: string;
     } | null;
-    onInvoiceGenerated: (updatedCertification: Certification) => void;
+    onInvoiceGenerated: (updatedCertification: Certification, paymentDate?: string) => void;
 }
 
 const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, project, certification, previousCertification, exchangeRate, companyInfo, onInvoiceGenerated }) => {
@@ -38,7 +38,8 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, project, c
     });
     const [signerName, setSignerName] = React.useState('');
     const [signerTitle, setSignerTitle] = React.useState('');
-
+    const [isPaid, setIsPaid] = React.useState(false);
+    const [paymentDate, setPaymentDate] = React.useState(new Date().toISOString().slice(0, 10));
 
     React.useEffect(() => {
         if (isOpen && project) {
@@ -50,6 +51,8 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, project, c
             });
             setSignerName(companyInfo?.signerName || 'Jose Javier Moreno');
             setSignerTitle(companyInfo?.signerTitle || 'Director General');
+            setIsPaid(!!certification?.paymentTransactionId);
+            setPaymentDate(new Date().toISOString().slice(0, 10));
         }
     }, [isOpen, project, companyInfo]);
 
@@ -144,7 +147,7 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, project, c
             invoicePdfBlob: pdfBlob,
         };
         await updateCertification(updatedCertification);
-        onInvoiceGenerated(updatedCertification);
+        onInvoiceGenerated(updatedCertification, isPaid ? paymentDate : undefined);
     };
 
     // FIX: Completed the UI component for the Invoice Modal.
@@ -195,6 +198,29 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, project, c
                             </tfoot>
                         </table>
                     </div>
+                </div>
+
+                <div className="p-3 bg-amber-50 rounded-md border border-amber-100">
+                    <label className="flex items-center gap-2 cursor-pointer mb-2">
+                        <input 
+                            type="checkbox" 
+                            checked={isPaid} 
+                            onChange={e => setIsPaid(e.target.checked)}
+                            className="h-4 w-4 text-cyan-600 rounded border-gray-300 focus:ring-cyan-500"
+                        />
+                        <span className="text-sm font-medium text-slate-700">Registrar pago inmediatamente</span>
+                    </label>
+                    {isPaid && (
+                        <div>
+                            <label className="block text-xs font-medium text-amber-700 mb-1">Fecha de Pago</label>
+                            <input
+                                type="date"
+                                value={paymentDate}
+                                onChange={e => setPaymentDate(e.target.value)}
+                                className="w-full px-3 py-2 border border-amber-200 rounded-md focus:ring-2 focus:ring-cyan-500 outline-none bg-white text-slate-900"
+                            />
+                        </div>
+                    )}
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4 border-t">

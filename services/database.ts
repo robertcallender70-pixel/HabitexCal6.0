@@ -408,6 +408,7 @@ export const duplicateProject = async (projectId: number): Promise<number | unde
         for (const activity of sourceActivities) {
             const newActivityData = { ...activity, projectId: newProjectId };
             delete newActivityData.id;
+            delete newActivityData.materialsPurchased;
             await activityStore.add(newActivityData);
         }
 
@@ -533,7 +534,30 @@ export const updateTransaction = async (item: Transaction) => {
     return db.put(TRANSACTIONS_STORE, item);
 };
 
-export const deleteTransaction = async (id: number) => {
+const parseLocalDate = (dateVal: string | Date | undefined | null): Date => {
+    if (!dateVal) return new Date();
+    if (dateVal instanceof Date) {
+        return dateVal;
+    }
+    if (typeof dateVal === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateVal)) {
+        const [year, month, day] = dateVal.split('-').map(Number);
+        return new Date(year, month - 1, day);
+    }
+    if (typeof dateVal === 'string' && dateVal.includes('T')) {
+        const datePart = dateVal.split('T')[0];
+        if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+            const [year, month, day] = datePart.split('-').map(Number);
+            return new Date(year, month - 1, day);
+        }
+    }
+    const d = new Date(dateVal);
+    if (!isNaN(d.getTime())) {
+        return d;
+    }
+    return new Date();
+};
+
+export const deleteTransaction = async (id: number, forceAllowPaymentDelete: boolean = false) => {
     const db = await initDB();
     const tx = db.transaction([TRANSACTIONS_STORE, INVENTORY_ITEMS_STORE, CERTIFICATIONS_STORE], 'readwrite');
     const transactionStore = tx.objectStore(TRANSACTIONS_STORE);
@@ -549,18 +573,47 @@ export const deleteTransaction = async (id: number) => {
 
     // Check if the transaction is locked by a certification
     const certifications: Certification[] = await certificationStore.index('projectId').getAll(transactionToDelete.projectId);
-    const lastCertification = certifications.sort((a, b) => new Date(b.certifiedAt).getTime() - new Date(a.certifiedAt).getTime())[0];
+    
+    // Is this transaction a payment transaction of any certification?
+    const linkedCertForPayment = certifications.find(c => c.paymentTransactionId === id);
 
-    if (lastCertification && new Date(transactionToDelete.date).getTime() <= new Date(lastCertification.certifiedAt).getTime()) {
-        alert("Esta transacción no se puede eliminar porque está incluida en una certificación existente. Elimine primero la certificación para desbloquearla.");
-        await tx.done;
-        return; // Abort deletion
+    if (linkedCertForPayment) {
+        if (!forceAllowPaymentDelete) {
+            alert("Esta transacción es el pago de una certificación cobrada. Para eliminarla, debe ir a la pestaña de Certificaciones y desmarcar la certificación como cobrada.");
+            await tx.done;
+            return; // Abort deletion
+        }
+    } else {
+        // Sort certifications chronologically by certifiedAt date
+        const sortedCerts = certifications.sort((a, b) => parseLocalDate(a.certifiedAt).getTime() - parseLocalDate(b.certifiedAt).getTime());
+        const latestCert = sortedCerts[sortedCerts.length - 1];
+        const pastCerts = sortedCerts.slice(0, sortedCerts.length - 1);
+
+        const txTime = parseLocalDate(transactionToDelete.date).getTime();
+
+        // Rule 1: Cannot delete transactions of past certifications (anything <= a past certification's certifiedAt)
+        const isLockedByPastCert = pastCerts.some(c => txTime <= parseLocalDate(c.certifiedAt).getTime());
+        
+        // Rule 2: Cannot delete transactions of the latest certification if it is paid
+        const isLatestCertPaid = latestCert && !!latestCert.paymentTransactionId;
+        const isLockedByLatestPaidCert = isLatestCertPaid && txTime <= parseLocalDate(latestCert.certifiedAt).getTime();
+
+        if (isLockedByPastCert) {
+            alert("Esta transacción no se puede eliminar porque pertenece a una certificación pasada (cerrada).");
+            await tx.done;
+            return;
+        }
+
+        if (isLockedByLatestPaidCert) {
+            alert("Esta transacción no se puede eliminar porque está vinculada a una certificación cobrada. Debe desmarcar la certificación como cobrada para poder eliminar sus transacciones.");
+            await tx.done;
+            return;
+        }
     }
     
     // If it's an income transaction, check if it's linked to a certification payment
-    if (transactionToDelete.type === TransactionType.INCOME && transactionToDelete.category === 'Pago por certificación') {
-        const projectCerts: Certification[] = await certificationStore.index('projectId').getAll(transactionToDelete.projectId);
-        const linkedCert = projectCerts.find(c => c.paymentTransactionId === id);
+    if (transactionToDelete.type === TransactionType.INCOME) {
+        const linkedCert = certifications.find(c => c.paymentTransactionId === id);
         if (linkedCert) {
             // Unlink it
             delete linkedCert.paymentTransactionId;

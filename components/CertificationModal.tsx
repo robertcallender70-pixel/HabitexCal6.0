@@ -55,7 +55,7 @@ const CertificationModal = ({
             const lastCertification = certifications.length > 0 ? certifications[certifications.length - 1] : null;
 
             if (isParentProject) {
-                const snapshot = await calculateConsolidatedCertificationSnapshot(project, allProjects, lastCertification?.snapshot || null);
+                const snapshot = await calculateConsolidatedCertificationSnapshot(project, allProjects, lastCertification?.snapshot || null, budgetGrandTotal);
                 setCalculation({ snapshot, valueForThisCertification: snapshot.finalBillableAmount });
 
             } else {

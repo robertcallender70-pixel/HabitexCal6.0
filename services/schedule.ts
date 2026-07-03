@@ -1,5 +1,28 @@
 import type { LaborItem } from '../types';
 
+export const parseLocalDate = (dateVal: string | Date | undefined | null): Date => {
+    if (!dateVal) return new Date();
+    if (dateVal instanceof Date) {
+        return dateVal;
+    }
+    if (typeof dateVal === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateVal)) {
+        const [year, month, day] = dateVal.split('-').map(Number);
+        return new Date(year, month - 1, day);
+    }
+    if (typeof dateVal === 'string' && dateVal.includes('T')) {
+        const datePart = dateVal.split('T')[0];
+        if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+            const [year, month, day] = datePart.split('-').map(Number);
+            return new Date(year, month - 1, day);
+        }
+    }
+    const d = new Date(dateVal);
+    if (!isNaN(d.getTime())) {
+        return d;
+    }
+    return new Date();
+};
+
 export function getDefaultProductivity(name: string, unit: string): number {
     const n = name.toLowerCase();
     const u = unit.toLowerCase();
@@ -164,9 +187,7 @@ export function calculateSchedule(
         };
     }
 
-    const start = startDateStr ? new Date(startDateStr) : new Date();
-    // Correct timezone offset to avoid date shifting to previous day
-    const localStart = new Date(start.getTime() + start.getTimezoneOffset() * 60 * 1000);
+    const localStart = parseLocalDate(startDateStr);
 
     // 1. Initial Schedule (full quantity)
     const initialSpecs = laborItems.map(item => {
@@ -202,8 +223,7 @@ export function calculateSchedule(
             if (!spec.predecessorId || !laborItems.some(a => a.id === spec.predecessorId)) {
                 let sDate: Date;
                 if (spec.scheduleStartDate) {
-                    const customS = new Date(spec.scheduleStartDate);
-                    sDate = new Date(customS.getTime() + customS.getTimezoneOffset() * 60 * 1000);
+                    sDate = parseLocalDate(spec.scheduleStartDate);
                 } else {
                     sDate = new Date(localStart);
                 }
@@ -240,8 +260,7 @@ export function calculateSchedule(
         if (!resolvedIds.has(spec.id)) {
             let sDate: Date;
             if (spec.scheduleStartDate) {
-                const customS = new Date(spec.scheduleStartDate);
-                sDate = new Date(customS.getTime() + customS.getTimezoneOffset() * 60 * 1000);
+                sDate = parseLocalDate(spec.scheduleStartDate);
             } else {
                 sDate = new Date(localStart);
             }
@@ -296,8 +315,7 @@ export function calculateSchedule(
             if (!spec.predecessorId || !laborItems.some(a => a.id === spec.predecessorId)) {
                 let sDate: Date;
                 if (spec.scheduleStartDate) {
-                    const customS = new Date(spec.scheduleStartDate);
-                    sDate = new Date(customS.getTime() + customS.getTimezoneOffset() * 60 * 1000);
+                    sDate = parseLocalDate(spec.scheduleStartDate);
                 } else {
                     sDate = new Date(localStart);
                 }
@@ -334,8 +352,7 @@ export function calculateSchedule(
         if (!resolvedIds.has(spec.id)) {
             let sDate: Date;
             if (spec.scheduleStartDate) {
-                const customS = new Date(spec.scheduleStartDate);
-                sDate = new Date(customS.getTime() + customS.getTimezoneOffset() * 60 * 1000);
+                sDate = parseLocalDate(spec.scheduleStartDate);
             } else {
                 sDate = new Date(localStart);
             }
