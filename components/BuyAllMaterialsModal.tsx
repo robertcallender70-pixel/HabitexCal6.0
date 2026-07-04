@@ -41,13 +41,14 @@ const getMaterialPrice = (name: string, unit: string, prices: Record<string, num
     return 0;
 };
 
-const BuyAllMaterialsModal = ({ isOpen, onClose, activity, inventoryItems, materialPrices, onConfirm }: {
+const BuyAllMaterialsModal = ({ isOpen, onClose, activity, inventoryItems, materialPrices, onConfirm, activities = [] }: {
     isOpen: boolean,
     onClose: () => void,
     activity: Activity | null,
     inventoryItems: InventoryItem[],
     materialPrices: Record<string, number>,
-    onConfirm: (activity: Activity, addToInventory: boolean, subtractInventory: boolean) => void
+    onConfirm: (activity: Activity, addToInventory: boolean, subtractInventory: boolean) => void,
+    activities?: Activity[]
 }) => {
     const [addToInventory, setAddToInventory] = React.useState(true);
     const [subtractInventory, setSubtractInventory] = React.useState(true);
@@ -58,10 +59,21 @@ const BuyAllMaterialsModal = ({ isOpen, onClose, activity, inventoryItems, mater
         const key = `${m.name.trim().toLowerCase()}-${m.unit.trim().toLowerCase()}`;
         const currentPrice = m.unitPrice || getMaterialPrice(m.name, m.unit, materialPrices) || 0;
         
-        // Calculate available quantity in inventory for this specific project/material
-        const available = inventoryItems
+        // Calculate total quantity purchased in inventory for this specific project/material
+        const totalPurchased = inventoryItems
             .filter(item => `${item.name.trim().toLowerCase()}-${item.unit.trim().toLowerCase()}` === key)
             .reduce((sum, item) => sum + (Number(item.quantityPurchased) - Number(item.quantityUsed)), 0);
+
+        // Calculate quantities of this material already allocated to other purchased activities
+        const allocatedQuantity = activities
+            .filter(act => act.id !== activity.id && act.materialsPurchased)
+            .reduce((sum, act) => {
+                const matchingMaterial = act.results.find(res => `${res.name.trim().toLowerCase()}-${res.unit.trim().toLowerCase()}` === key);
+                return sum + (matchingMaterial ? Number(matchingMaterial.quantity) : 0);
+            }, 0);
+
+        // Available free stock is the remainder after subtracting what has already been allocated
+        const available = Math.max(0, totalPurchased - allocatedQuantity);
 
         const quantityNeeded = subtractInventory ? Math.max(0, m.quantity - available) : m.quantity;
 

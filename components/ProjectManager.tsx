@@ -1486,7 +1486,8 @@ export const ProjectManager: React.FC = () => {
             });
         } else {
             // Standard single project logic
-            const lastCert = certifications.length > 0 ? certifications[certifications.length - 1] : null;
+            const realCerts = certifications.filter(c => !c.isAdvance);
+            const lastCert = realCerts.length > 0 ? realCerts[realCerts.length - 1] : null;
             const rate = displayCurrency === 'CUP' ? (selectedProject?.exchangeRate || 380) : 1;
 
             if (lastCert) {
@@ -1556,10 +1557,21 @@ export const ProjectManager: React.FC = () => {
             const key = `${m.name.trim().toLowerCase()}-${m.unit.trim().toLowerCase()}`;
             const currentPrice = m.unitPrice || getMaterialPrice(m.name, m.unit, materialPrices) || 0;
             
-            // Calculate available quantity in inventory for this specific project/material
-            const available = inventoryItems
+            // Calculate total quantity purchased in inventory for this specific project/material
+            const totalPurchased = inventoryItems
                 .filter(item => `${item.name.trim().toLowerCase()}-${item.unit.trim().toLowerCase()}` === key)
                 .reduce((sum, item) => sum + (Number(item.quantityPurchased) - Number(item.quantityUsed)), 0);
+
+            // Calculate quantities of this material already allocated to other purchased activities
+            const allocatedQuantity = activities
+                .filter(act => act.id !== activity.id && act.materialsPurchased)
+                .reduce((sum, act) => {
+                    const matchingMaterial = act.results.find(res => `${res.name.trim().toLowerCase()}-${res.unit.trim().toLowerCase()}` === key);
+                    return sum + (matchingMaterial ? Number(matchingMaterial.quantity) : 0);
+                }, 0);
+
+            // Available free stock is the remainder after subtracting what has already been allocated
+            const available = Math.max(0, totalPurchased - allocatedQuantity);
 
             const quantityNeeded = subtractInventory ? Math.max(0, m.quantity - available) : m.quantity;
 
@@ -1984,7 +1996,8 @@ export const ProjectManager: React.FC = () => {
                 getTransactions(selectedProject.id),
             ]);
 
-            const lastCert = certifications.length > 0 ? certifications[certifications.length - 1] : null;
+            const realCerts = certifications.filter(c => !c.isAdvance);
+            const lastCert = realCerts.length > 0 ? realCerts[realCerts.length - 1] : null;
             const finalBudgetTotal = budgetGrandTotal.usd;
             const snapshot = calculateCertificationSnapshot(selectedProject, finalLaborItems, finalTransactions, finalBudgetTotal, lastCert?.snapshot || null, financialSummary.anticipoPercentage);
             
@@ -1998,7 +2011,7 @@ export const ProjectManager: React.FC = () => {
             
             const allCerts = await getCertifications(selectedProject.id);
             const newCert = allCerts.find(c => c.id === newCertId);
-            const prevCert = allCerts.length > 1 ? allCerts[allCerts.length - 2] : null;
+            const prevCert = lastCert;
 
             if (newCert) {
                 setInvoiceData({ cert: newCert, prevCert });
@@ -2019,14 +2032,19 @@ export const ProjectManager: React.FC = () => {
 
     const lastCertificationDate = React.useMemo(() => {
         if (!certifications || certifications.length === 0) return null;
-        return new Date(certifications[certifications.length - 1].certifiedAt);
+        const realCerts = certifications.filter(c => !c.isAdvance);
+        if (realCerts.length === 0) return null;
+        return new Date(realCerts[realCerts.length - 1].certifiedAt);
     }, [certifications]);
     
     const minLaborQuantities = React.useMemo(() => {
         const minQuantities = new Map<number, number>();
         if (!certifications || certifications.length === 0) return minQuantities;
         
-        const lastCertSnapshot = certifications[certifications.length - 1].snapshot;
+        const realCerts = certifications.filter(c => !c.isAdvance);
+        if (realCerts.length === 0) return minQuantities;
+        
+        const lastCertSnapshot = realCerts[realCerts.length - 1].snapshot;
         lastCertSnapshot.completedLaborItems.forEach(item => {
             if (item.id) {
                 minQuantities.set(item.id, item.quantityCompleted || 0);
@@ -2716,7 +2734,8 @@ export const ProjectManager: React.FC = () => {
     };
 
     const renderBudgetView = () => {
-        const lastCertSnapshot = certifications.length > 0 ? certifications[certifications.length - 1]?.snapshot : null;
+        const realCerts = certifications.filter(c => !c.isAdvance);
+        const lastCertSnapshot = realCerts.length > 0 ? realCerts[realCerts.length - 1]?.snapshot : null;
 
         const getRealValueForCalculated = (name: string) => {
             if (!lastCertSnapshot) return 0;
@@ -3739,7 +3758,9 @@ export const ProjectManager: React.FC = () => {
                 ) : (
                     <div className="space-y-4">
                         {certifications.map((cert, index) => {
-                            const prevCert = index > 0 ? certifications[index - 1] : null;
+                            const realCerts = certifications.filter(c => !c.isAdvance);
+                            const realIndex = realCerts.findIndex(c => c.id === cert.id);
+                            const prevCert = !cert.isAdvance && realIndex > 0 ? realCerts[realIndex - 1] : null;
                             const isPaid = !!cert.paymentTransactionId;
                             const rate = selectedProject?.exchangeRate || 380;
                             const totalAmount = cert.snapshot.finalBillableAmount;
@@ -3851,6 +3872,7 @@ export const ProjectManager: React.FC = () => {
                         exchangeRate={selectedProject.exchangeRate || 380}
                         onSave={async (cert, paymentDate) => {
                             const newCertId = await addCertification(cert);
+                            let finalCert = { ...cert, id: newCertId };
                             if (paymentDate) {
                                 try {
                                     const paymentTx: Omit<Transaction, 'id' | 'projectId'> = {
@@ -3861,7 +3883,7 @@ export const ProjectManager: React.FC = () => {
                                         category: 'Anticipo de obra',
                                     };
                                     const txId = await addTransaction({ ...paymentTx, projectId: selectedProject.id! });
-                                    const finalCert = { ...cert, id: newCertId, paymentTransactionId: txId };
+                                    finalCert = { ...cert, id: newCertId, paymentTransactionId: txId };
                                     await updateCertification(finalCert);
                                 } catch (error) {
                                     console.error("Failed to register payment on save:", error);
@@ -3869,6 +3891,10 @@ export const ProjectManager: React.FC = () => {
                             }
                             await loadProjectData();
                             setIsAdvanceInvoiceModalOpen(false);
+                            
+                            // Directly open InvoiceModal for the advance invoice to generate PDF immediately
+                            setInvoiceData({ cert: finalCert, prevCert: null });
+                            setIsInvoiceModalOpen(true);
                         }}
                     />
                 )}
@@ -4117,6 +4143,7 @@ export const ProjectManager: React.FC = () => {
                 inventoryItems={inventoryItems}
                 materialPrices={materialPrices}
                 onConfirm={handleConfirmBuyAll}
+                activities={activities}
             />
 
             <Modal

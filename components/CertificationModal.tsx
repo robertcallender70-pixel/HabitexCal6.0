@@ -35,7 +35,8 @@ const CertificationModal = ({
     masterAnticipoPercentage: number,
     onSave: (cert: Certification, paymentDate?: string) => void
 }) => {
-    const [name, setName] = React.useState(`Certificación #${certifications.length + 1}`);
+    const realCerts = certifications.filter(c => !c.isAdvance);
+    const [name, setName] = React.useState(`Certificación #${realCerts.length + 1}`);
     const [calculation, setCalculation] = React.useState<any>(null);
     const [isLoading, setIsLoading] = React.useState(true);
     const [issueDate, setIssueDate] = React.useState(new Date().toISOString().slice(0, 10));
@@ -46,13 +47,14 @@ const CertificationModal = ({
         if (!isOpen) return;
 
         setIsLoading(true);
-        setName(`Certificación #${certifications.length + 1}`);
+        const currentRealCerts = certifications.filter(c => !c.isAdvance);
+        setName(`Certificación #${currentRealCerts.length + 1}`);
         setIssueDate(new Date().toISOString().slice(0, 10));
         setPaymentDate(new Date().toISOString().slice(0, 10));
         setIsPaid(false);
 
         const performCalculation = async () => {
-            const lastCertification = certifications.length > 0 ? certifications[certifications.length - 1] : null;
+            const lastCertification = currentRealCerts.length > 0 ? currentRealCerts[currentRealCerts.length - 1] : null;
 
             if (isParentProject) {
                 const snapshot = await calculateConsolidatedCertificationSnapshot(project, allProjects, lastCertification?.snapshot || null, budgetGrandTotal);

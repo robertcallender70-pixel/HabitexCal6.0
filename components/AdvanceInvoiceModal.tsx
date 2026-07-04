@@ -159,7 +159,7 @@ const AdvanceInvoiceModal: React.FC<AdvanceInvoiceModalProps> = ({ isOpen, onClo
                         Cancelar
                     </button>
                     <button onClick={handleSave} className="px-4 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700 shadow-md">
-                        Generar Certificación de Anticipo
+                        Generar Factura de Anticipo
                     </button>
                 </div>
             </div>
