@@ -23,6 +23,7 @@ import ActivityForm from './ActivityForm';
 import AddLaborItemModal from './AddLaborItemModal';
 import BudgetItemModal from './BudgetItemModal';
 import CertificationModal from './CertificationModal';
+import CertificationDetailsModal from './CertificationDetailsModal';
 import AdvanceInvoiceModal from './AdvanceInvoiceModal'; // NEW
 import TransactionModal from './TransactionModal';
 import InventoryItemModal from './InventoryItemModal';
@@ -239,6 +240,10 @@ export const ProjectManager: React.FC = () => {
 
     const [isUnpayConfirmModalOpen, setIsUnpayConfirmModalOpen] = React.useState(false);
     const [certificationToUnpay, setCertificationToUnpay] = React.useState<Certification | null>(null);
+
+    const [isCertificationDetailsModalOpen, setIsCertificationDetailsModalOpen] = React.useState(false);
+    const [selectedCertificationForDetails, setSelectedCertificationForDetails] = React.useState<Certification | null>(null);
+    const [prevCertificationForDetails, setPrevCertificationForDetails] = React.useState<Certification | null>(null);
 
     const [isFullInvoiceConfirmModalOpen, setIsFullInvoiceConfirmModalOpen] = React.useState(false);
 
@@ -3783,6 +3788,17 @@ export const ProjectManager: React.FC = () => {
                                               </>
                                          )}
                                          <button 
+                                             onClick={() => {
+                                                 setSelectedCertificationForDetails(cert);
+                                                 setPrevCertificationForDetails(prevCert);
+                                                 setIsCertificationDetailsModalOpen(true);
+                                             }}
+                                             className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-md text-sm font-medium border border-slate-200"
+                                             title="Ver Desglose de Certificación"
+                                         >
+                                             <EyeIcon className="h-4 w-4" /> Ver Desglose
+                                         </button>
+                                         <button 
                                              onClick={() => { setInvoiceData({ cert, prevCert }); setIsInvoiceModalOpen(true); }}
                                              className="flex items-center gap-1 px-3 py-1.5 bg-cyan-50 text-cyan-700 hover:bg-cyan-100 rounded-md text-sm font-medium border border-cyan-100"
                                          >
@@ -3968,6 +3984,8 @@ export const ProjectManager: React.FC = () => {
                 onClose={() => setIsInventoryItemModalOpen(false)}
                 onSave={handleSaveInventoryItem}
                 initialData={inventoryDefaults || editingInventoryItem || undefined}
+                totalMaterials={totalMaterials}
+                inventoryItems={inventoryItems}
             />
 
             <Modal
@@ -4080,6 +4098,16 @@ export const ProjectManager: React.FC = () => {
                     await loadProjectData();
                     setIsCertificationModalOpen(false);
                 }}
+            />
+
+            <CertificationDetailsModal
+                isOpen={isCertificationDetailsModalOpen}
+                onClose={() => setIsCertificationDetailsModalOpen(false)}
+                project={selectedProject!}
+                certification={selectedCertificationForDetails}
+                prevCertification={prevCertificationForDetails}
+                displayCurrency={displayCurrency}
+                exchangeRate={selectedProject?.exchangeRate || 380}
             />
 
             <BuyAllMaterialsModal

@@ -7,6 +7,8 @@ import type {
     Transaction,
     InvoiceData,
     OfferData,
+    Certification,
+    CertificationSnapshot,
 } from '../types';
 import { TransactionType } from '../types';
 
@@ -1350,4 +1352,366 @@ export const exportOfferDetailedToPDF = (data: OfferData): void => {
     addPageOverlays(doc, `Oferta Detallada #${data.offerInfo.offerNumber}`, true);
 
     doc.save(`Oferta_Detallada_${data.offerInfo.offerNumber}_${data.project.name.replace(/\s/g, '_')}.pdf`);
+};
+
+export const exportCertificationToPDF = (
+    project: Project,
+    cert: Certification,
+    prevCert: Certification | null,
+    displayCurrency: 'CUP' | 'USD',
+    exchangeRate: number
+): void => {
+    const { jsPDF } = jspdf;
+    const doc = new jsPDF();
+    const pageHeight = doc.internal.pageSize.height;
+    const pageWidth = doc.internal.pageSize.width;
+    const rate = exchangeRate;
+
+    const formatAmount = (val: number) => {
+        const amt = displayCurrency === 'CUP' ? val * rate : val;
+        return `$${amt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${displayCurrency}`;
+    };
+
+    const formatQty = (val: number) => {
+        return val.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+    };
+
+    // --- Elegant Page Header Banner ---
+    doc.setFillColor(15, 118, 110); // Corporate teal-700
+    doc.rect(14, 16, pageWidth - 28, 24, 'F');
+    
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(255, 255, 255);
+    doc.text('HABITEX CALCULA  •  CERTIFICACIÓN DE AVANCE DE OBRA', 20, 24);
+    
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(255, 255, 255);
+    doc.text(cert.name.toUpperCase(), 20, 32);
+
+    let y = 50;
+
+    // --- Meta Details ---
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 41, 59);
+    doc.text('INFORMACIÓN DE LA CERTIFICACIÓN', 14, y);
+    y += 4;
+    
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.4);
+    doc.line(14, y, pageWidth - 14, y);
+    y += 6;
+
+    // Left Column
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(71, 85, 105);
+    doc.text('Proyecto:', 14, y);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text(project.name, 35, y);
+
+    // Right Column
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(71, 85, 105);
+    doc.text('Fecha Emisión:', 110, y);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text(parseLocalDate(cert.certifiedAt).toLocaleDateString(), 140, y);
+    y += 6;
+
+    // Left Column
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(71, 85, 105);
+    doc.text('Cliente:', 14, y);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text(project.clientName || 'No especificado', 35, y);
+
+    // Right Column
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(71, 85, 105);
+    doc.text('Moneda / Tasa:', 110, y);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text(`${displayCurrency} (Tasa: 1 USD = ${rate} CUP)`, 140, y);
+    y += 10;
+
+    // --- Metric Cards (Page 1) ---
+    const cardW = (pageWidth - 36) / 3;
+    const cardH = 24;
+
+    const drawSummaryCard = (x: number, title: string, subtitle: string, value: string) => {
+        doc.setFillColor(248, 250, 252); // slate-50
+        doc.setDrawColor(226, 232, 240); // slate-200
+        doc.setLineWidth(0.3);
+        doc.roundedRect(x, y, cardW, cardH, 2, 2, 'FD');
+
+        doc.setFillColor(15, 118, 110); // teal-600 indicator
+        doc.rect(x, y, 2, cardH, 'F');
+
+        doc.setFontSize(7.5);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(100, 116, 139);
+        doc.text(title.toUpperCase(), x + 5, y + 6);
+
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(15, 118, 110);
+        doc.text(value, x + 5, y + 13);
+
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(148, 163, 184);
+        doc.text(subtitle, x + 5, y + 19);
+    };
+
+    const accumValue = cert.snapshot.grandTotal;
+    const prevValue = prevCert ? prevCert.snapshot.grandTotal : 0;
+    const periodValue = cert.snapshot.incrementalValue;
+
+    drawSummaryCard(14, 'Valor Acumulado Anterior', 'Certificado previamente', formatAmount(prevValue));
+    drawSummaryCard(14 + cardW + 4, 'Ejecutado del Periodo', 'Avance bruto de esta etapa', formatAmount(periodValue));
+    drawSummaryCard(14 + (cardW + 4) * 2, 'Valor Acumulado Actual', 'Total ejecutado a la fecha', formatAmount(accumValue));
+    y += cardH + 10;
+
+    // --- Table 1: Resumen de Ejecución Financiera Acumulada ---
+    doc.setFontSize(10.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 41, 59);
+    doc.text('RESUMEN DE EJECUCIÓN FINANCIERA', 14, y);
+    y += 4;
+
+    const summaryRows = [
+        [
+            '1. Valor Bruto de Obra Ejecutada',
+            formatAmount(prevValue),
+            formatAmount(periodValue),
+            formatAmount(accumValue)
+        ],
+        [
+            '2. Descuento de Anticipo Proporcional',
+            formatAmount(prevCert ? prevCert.snapshot.cumulativeAnticipoDeducted : 0),
+            formatAmount(cert.snapshot.anticipoDeduction),
+            formatAmount(cert.snapshot.cumulativeAnticipoDeducted)
+        ],
+        [
+            '3. Neto Facturable / Cobrable',
+            formatAmount(prevCert ? prevCert.snapshot.cumulativeNetBillable - prevCert.snapshot.finalBillableAmount : 0),
+            formatAmount(cert.snapshot.finalBillableAmount),
+            formatAmount(cert.snapshot.cumulativeNetBillable)
+        ]
+    ];
+
+    (doc as any).autoTable({
+        startY: y,
+        head: [['Concepto / Estado Financiero', 'Acumulado Anterior', 'Ejecutado del Período', 'Acumulado Actual']],
+        body: summaryRows,
+        theme: 'grid',
+        headStyles: { fillColor: [15, 118, 110], textColor: 255, fontStyle: 'bold', fontSize: 9, halign: 'center' },
+        bodyStyles: { fontSize: 8.5 },
+        columnStyles: {
+            0: { fontStyle: 'bold' },
+            1: { halign: 'right' },
+            2: { halign: 'right', fontStyle: 'bold', textColor: [15, 118, 110] },
+            3: { halign: 'right' }
+        },
+        margin: { left: 14, right: 14 }
+    });
+
+    y = (doc as any).lastAutoTable.finalY + 14;
+
+    // --- Page 2: Mano de Obra Ejecutada (Cómputo Técnico) ---
+    doc.addPage();
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 41, 59);
+    doc.text('CÓMPUTO TÉCNICO DE MANO DE OBRA EJECUTADA', 14, 20);
+
+    const laborRows = cert.snapshot.completedLaborItems.map(item => {
+        const prevItem = prevCert?.snapshot.completedLaborItems.find(pi => pi.name === item.name);
+        const prevQty = prevItem ? (prevItem.quantityCompleted || 0) : 0;
+        const totalQty = item.quantityCompleted || 0;
+        const periodQty = Math.max(0, totalQty - prevQty);
+
+        return [
+            item.name,
+            item.unit,
+            formatAmount(item.unitPrice),
+            formatQty(prevQty),
+            formatQty(periodQty),
+            formatQty(totalQty),
+            formatAmount(periodQty * item.unitPrice),
+            formatAmount(totalQty * item.unitPrice)
+        ];
+    });
+
+    (doc as any).autoTable({
+        startY: 25,
+        head: [['Actividad Constructiva', 'Uni.', 'Precio Unit.', 'Cant. Ant.', 'Cant. Per.', 'Cant. Act.', 'Importe Per.', 'Importe Act.']],
+        body: laborRows,
+        foot: [
+            [
+                { content: 'SUBTOTAL COSTO MANO DE OBRA DIRECTA', colSpan: 6, styles: { halign: 'right', fontStyle: 'bold' } },
+                { content: formatAmount(cert.snapshot.completedLaborCost - (prevCert?.snapshot.completedLaborCost || 0)), styles: { fontStyle: 'bold' } },
+                { content: formatAmount(cert.snapshot.completedLaborCost), styles: { fontStyle: 'bold' } }
+            ]
+        ],
+        theme: 'striped',
+        headStyles: { fillColor: [15, 118, 110], textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center' },
+        bodyStyles: { fontSize: 7.5 },
+        columnStyles: {
+            2: { halign: 'right' },
+            3: { halign: 'right' },
+            4: { halign: 'right' },
+            5: { halign: 'right' },
+            6: { halign: 'right' },
+            7: { halign: 'right' }
+        },
+        footStyles: { fillColor: [240, 249, 250], textColor: [15, 118, 110], fontSize: 8 },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        margin: { left: 14, right: 14 }
+    });
+
+    y = (doc as any).lastAutoTable.finalY + 12;
+
+    // --- Gastos Indirectos, Utilidad e Impuestos Table ---
+    if (y > pageHeight - 65) {
+        doc.addPage();
+        y = 20;
+    }
+
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 41, 59);
+    doc.text('COSTOS INDIRECTOS, UTILIDAD E IMPUESTOS', 14, y);
+    y += 4;
+
+    const getIndirectRow = (name: string, pct: number, val: number, prevVal: number) => {
+        return [
+            name,
+            pct > 0 ? `${pct}%` : '-',
+            formatAmount(prevVal),
+            formatAmount(val - prevVal),
+            formatAmount(val)
+        ];
+    };
+
+    const indirectRows = [];
+    if (cert.snapshot.logisticsPercentage) {
+        indirectRows.push(getIndirectRow('Logística (sobre Mano de Obra)', cert.snapshot.logisticsPercentage, cert.snapshot.logisticsCost, prevCert?.snapshot.logisticsCost || 0));
+    }
+    if (cert.snapshot.technicalAssistancePercentage) {
+        indirectRows.push(getIndirectRow('Asistencia Técnica (sobre Mano de Obra)', cert.snapshot.technicalAssistancePercentage, cert.snapshot.technicalAssistanceCost, prevCert?.snapshot.technicalAssistanceCost || 0));
+    }
+    if (cert.snapshot.toolsAndUtilitiesPercentage) {
+        indirectRows.push(getIndirectRow('Gastos de Útiles y Herramientas (sobre Mano de Obra)', cert.snapshot.toolsAndUtilitiesPercentage, cert.snapshot.toolsAndUtilitiesCost || 0, prevCert?.snapshot.toolsAndUtilitiesCost || 0));
+    }
+    if (cert.snapshot.profitPercentage) {
+        indirectRows.push(getIndirectRow('Utilidad de Empresa', cert.snapshot.profitPercentage, cert.snapshot.profitCost, prevCert?.snapshot.profitCost || 0));
+    }
+    if (cert.snapshot.hasServiceTax && cert.snapshot.serviceTaxPercentage) {
+        indirectRows.push(getIndirectRow('Impuesto Comercial de Servicios', cert.snapshot.serviceTaxPercentage, cert.snapshot.serviceTaxCost, prevCert?.snapshot.serviceTaxCost || 0));
+    }
+
+    if (indirectRows.length > 0) {
+        (doc as any).autoTable({
+            startY: y,
+            head: [['Concepto Indirecto', 'Tasa', 'Acumulado Anterior', 'Ejecutado Período', 'Acumulado Actual']],
+            body: indirectRows,
+            theme: 'grid',
+            headStyles: { fillColor: [15, 118, 110], textColor: 255, fontSize: 8.5, fontStyle: 'bold', halign: 'center' },
+            bodyStyles: { fontSize: 8 },
+            columnStyles: {
+                1: { halign: 'center' },
+                2: { halign: 'right' },
+                3: { halign: 'right', fontStyle: 'bold' },
+                4: { halign: 'right' }
+            },
+            margin: { left: 14, right: 14 }
+        });
+        y = (doc as any).lastAutoTable.finalY + 12;
+    }
+
+    // --- Page 3: Materiales, Transportación y Gastos Varios del Periodo (if any exist) ---
+    const expensesRows: any[] = [];
+    if (cert.snapshot.materialTransactions) {
+        cert.snapshot.materialTransactions.forEach(t => {
+            expensesRows.push([parseLocalDate(t.date).toLocaleDateString(), 'Materiales', t.description, formatAmount(t.amount)]);
+        });
+    }
+    if (cert.snapshot.transportTransactions) {
+        cert.snapshot.transportTransactions.forEach(t => {
+            expensesRows.push([parseLocalDate(t.date).toLocaleDateString(), 'Transportación', t.description, formatAmount(t.amount)]);
+        });
+    }
+    if (cert.snapshot.manualExpenseItems) {
+        cert.snapshot.manualExpenseItems.forEach(t => {
+            expensesRows.push([parseLocalDate(t.date).toLocaleDateString(), t.category || 'Gastos Varios', t.description, formatAmount(t.amount)]);
+        });
+    }
+
+    if (expensesRows.length > 0) {
+        doc.addPage();
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(30, 41, 59);
+        doc.text('SISTEMAS DE SUMINISTRO, MATERIALES Y GASTOS VARIOS DEL PERÍODO', 14, 20);
+
+        (doc as any).autoTable({
+            startY: 25,
+            head: [['Fecha', 'Categoría de Gasto', 'Concepto / Descripción del Movimiento', 'Importe']],
+            body: expensesRows,
+            theme: 'striped',
+            headStyles: { fillColor: [15, 118, 110], textColor: 255, fontSize: 8.5, fontStyle: 'bold' },
+            bodyStyles: { fontSize: 8 },
+            columnStyles: {
+                3: { halign: 'right', fontStyle: 'bold' }
+            },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
+            margin: { left: 14, right: 14 }
+        });
+
+        y = (doc as any).lastAutoTable.finalY + 12;
+    }
+
+    // --- Signatures Block ---
+    if (y > pageHeight - 50) {
+        doc.addPage();
+        y = 30;
+    } else {
+        y += 10;
+    }
+
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(71, 85, 105);
+
+    // Line for signatures
+    const sigLineW = 55;
+    const leftSigX = 25;
+    const rightSigX = pageWidth - sigLineW - 25;
+
+    doc.setDrawColor(203, 213, 225);
+    doc.setLineWidth(0.4);
+    
+    // Left signature line (Constructor)
+    doc.line(leftSigX, y + 20, leftSigX + sigLineW, y + 20);
+    // Right signature line (Supervisor/Inversionista)
+    doc.line(rightSigX, y + 20, rightSigX + sigLineW, y + 20);
+
+    doc.setFont('helvetica', 'bold');
+    doc.text('CONTRATISTA / CONSTRUCTOR', leftSigX + sigLineW/2, y + 25, { align: 'center' });
+    doc.text('SUPERVISOR / INVERSIONISTA', rightSigX + sigLineW/2, y + 25, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.text('Firma y Sello Comercial', leftSigX + sigLineW/2, y + 29, { align: 'center' });
+    doc.text('Firma de Conformidad Técnica', rightSigX + sigLineW/2, y + 29, { align: 'center' });
+
+    // Header and footers overlays
+    addPageOverlays(doc, `Certificación: ${cert.name}`, true);
+
+    doc.save(`Certificacion_${cert.name.replace(/\s/g, '_')}_${project.name.replace(/\s/g, '_')}.pdf`);
 };

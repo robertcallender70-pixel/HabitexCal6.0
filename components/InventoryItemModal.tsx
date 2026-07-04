@@ -1,6 +1,6 @@
 import React from 'react';
 import Modal from './Modal';
-import type { InventoryItem } from '../types';
+import type { InventoryItem, Material } from '../types';
 
 const Input = (props: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) => (
     <div>
@@ -14,9 +14,18 @@ interface InventoryItemModalProps {
     onClose: () => void;
     onSave: (item: Omit<InventoryItem, 'id' | 'projectId' | 'quantityUsed' | 'dateAdded'>) => void;
     initialData?: Partial<InventoryItem>;
+    totalMaterials?: Material[];
+    inventoryItems?: InventoryItem[];
 }
 
-export const InventoryItemModal: React.FC<InventoryItemModalProps> = ({ isOpen, onClose, onSave, initialData }) => {
+export const InventoryItemModal: React.FC<InventoryItemModalProps> = ({ 
+    isOpen, 
+    onClose, 
+    onSave, 
+    initialData,
+    totalMaterials,
+    inventoryItems
+}) => {
     const [name, setName] = React.useState('');
     const [quantityPurchased, setQuantityPurchased] = React.useState('');
     const [unit, setUnit] = React.useState('');
@@ -28,6 +37,50 @@ export const InventoryItemModal: React.FC<InventoryItemModalProps> = ({ isOpen, 
             setUnit(initialData?.unit || '');
         }
     }, [isOpen, initialData]);
+
+    const warningInfo = React.useMemo(() => {
+        if (!isOpen || !totalMaterials || !name.trim() || !unit.trim()) return null;
+        
+        const trimmedName = name.trim().toLowerCase();
+        const trimmedUnit = unit.trim().toLowerCase();
+        
+        // Find matching required material in totalMaterials
+        const requiredMaterial = totalMaterials.find(m => 
+            m.name.trim().toLowerCase() === trimmedName && 
+            m.unit.trim().toLowerCase() === trimmedUnit
+        );
+        
+        if (!requiredMaterial) {
+            return {
+                type: 'not_in_project' as const,
+                message: 'Nota: Este material no forma parte de las actividades calculadas de este proyecto, pero se puede agregar de forma independiente.'
+            };
+        }
+        
+        const totalRequired = requiredMaterial.quantity;
+        
+        // Sum already purchased, excluding current item being edited if we are editing
+        const alreadyPurchased = (inventoryItems || [])
+            .filter(item => 
+                item.id !== initialData?.id && 
+                item.name.trim().toLowerCase() === trimmedName && 
+                item.unit.trim().toLowerCase() === trimmedUnit
+            )
+            .reduce((sum, item) => sum + (Number(item.quantityPurchased) || 0), 0);
+            
+        const enteredQty = parseFloat(quantityPurchased) || 0;
+        const newTotalPurchased = alreadyPurchased + enteredQty;
+        
+        if (newTotalPurchased > totalRequired) {
+            return {
+                type: 'exceeds' as const,
+                message: `Atención: Esta compra superará la cantidad necesaria para el proyecto. (Requerido: ${totalRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${unit}, Ya comprado: ${alreadyPurchased.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${unit}, Nueva compra: ${enteredQty.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${unit}). El total comprado será de ${newTotalPurchased.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${unit}.`,
+                excess: newTotalPurchased - totalRequired
+            };
+        }
+        
+        return null;
+    }, [isOpen, name, quantityPurchased, unit, totalMaterials, inventoryItems, initialData]);
 
     const handleSave = () => {
         const numQuantity = parseFloat(quantityPurchased);
@@ -65,6 +118,26 @@ export const InventoryItemModal: React.FC<InventoryItemModalProps> = ({ isOpen, 
                         placeholder="sacos, m³, kg, etc."
                     />
                 </div>
+
+                {warningInfo && (
+                    <div className={`p-3 rounded-lg border text-sm flex items-start gap-2.5 shadow-sm transition-all duration-200 ${
+                        warningInfo.type === 'exceeds' 
+                            ? 'bg-amber-50 border-amber-200 text-amber-850' 
+                            : 'bg-cyan-50 border-cyan-200 text-cyan-850'
+                    }`}>
+                        <span className="text-base leading-none">
+                            {warningInfo.type === 'exceeds' ? '⚠️' : 'ℹ️'}
+                        </span>
+                        <div>
+                            <strong className="block font-semibold">
+                                {warningInfo.type === 'exceeds' ? 'Materiales de más detectados' : 'Material independiente'}
+                            </strong>
+                            <p className="mt-0.5 text-xs opacity-90 leading-relaxed">
+                                {warningInfo.message}
+                            </p>
+                        </div>
+                    </div>
+                )}
             </div>
             <div className="flex justify-end gap-4 mt-6 pt-4 border-t">
                 <button type="button" onClick={onClose} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-md hover:bg-slate-300">Cancelar</button>

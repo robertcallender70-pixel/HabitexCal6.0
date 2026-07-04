@@ -50,7 +50,7 @@ const BuyAllMaterialsModal = ({ isOpen, onClose, activity, inventoryItems, mater
     onConfirm: (activity: Activity, addToInventory: boolean, subtractInventory: boolean) => void
 }) => {
     const [addToInventory, setAddToInventory] = React.useState(true);
-    const [subtractInventory, setSubtractInventory] = React.useState(false);
+    const [subtractInventory, setSubtractInventory] = React.useState(true);
     
     if (!activity) return null;
 
@@ -79,11 +79,11 @@ const BuyAllMaterialsModal = ({ isOpen, onClose, activity, inventoryItems, mater
         <Modal isOpen={isOpen} onClose={onClose} title={`Comprar Materiales para "${activity.name}"`}>
             <div className="space-y-4">
                 {activity.materialsPurchased && (
-                    <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-md text-sm flex items-start gap-2.5 shadow-sm">
+                    <div className="p-3 bg-amber-50 border border-amber-200 text-amber-850 rounded-md text-sm flex items-start gap-2.5 shadow-sm">
                         <span className="text-lg leading-none">⚠️</span>
                         <div>
                             <strong className="block font-semibold">Materiales ya comprados</strong>
-                            <p className="mt-0.5 text-xs text-amber-700">
+                            <p className="mt-0.5 text-xs opacity-90">
                                 Ya has registrado una compra general de materiales para esta actividad anteriormente. Volver a comprar puede duplicar la adquisición de materiales de forma involuntaria en tus finanzas e inventario.
                             </p>
                         </div>
@@ -124,7 +124,7 @@ const BuyAllMaterialsModal = ({ isOpen, onClose, activity, inventoryItems, mater
                             <span>Costo Total:</span>
                             <span>{totalCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD</span>
                         </div>
-                        <div className="pt-4 border-t space-y-2">
+                        <div className="pt-4 border-t space-y-3">
                             <label className="flex items-center gap-3 cursor-pointer">
                                 <input
                                     type="checkbox"
@@ -143,6 +143,25 @@ const BuyAllMaterialsModal = ({ isOpen, onClose, activity, inventoryItems, mater
                                 />
                                 <span className="text-sm text-slate-700">Restar materiales que ya existen en el inventario</span>
                             </label>
+
+                            {/* Adaptive warning banners to prevent duplicate purchasing */}
+                            {subtractInventory ? (
+                                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-850 rounded-md text-xs flex items-start gap-2.5 shadow-sm transition-all duration-200">
+                                    <span className="text-sm leading-none">✓</span>
+                                    <div>
+                                        <strong className="font-semibold block">Ajuste de inventario activo</strong>
+                                        <p className="mt-0.5 opacity-90">El sistema restará automáticamente los materiales ya comprados disponibles en inventario para evitar duplicaciones y proteger tu presupuesto.</p>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-850 rounded-md text-xs flex items-start gap-2.5 shadow-sm transition-all duration-200 animate-pulse">
+                                    <span className="text-sm leading-none">⚠️</span>
+                                    <div>
+                                        <strong className="font-semibold block">Riesgo de duplicación y desfase presupuestario</strong>
+                                        <p className="mt-0.5 opacity-90">Tienes desactivado el ajuste de inventario. Esto comprará la totalidad de materiales calculados de la actividad, ignorando las compras previas que ya registraste.</p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </>
                 )}

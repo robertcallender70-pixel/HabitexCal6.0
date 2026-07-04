@@ -256,29 +256,6 @@ const CertificationModal = ({
                     </div>
                 )}
 
-                <div className="p-3 bg-amber-50 rounded-md border border-amber-100">
-                    <label className="flex items-center gap-2 cursor-pointer mb-2">
-                        <input 
-                            type="checkbox" 
-                            checked={isPaid} 
-                            onChange={e => setIsPaid(e.target.checked)}
-                            className="h-4 w-4 text-cyan-600 rounded border-gray-300 focus:ring-cyan-500"
-                        />
-                        <span className="text-sm font-medium text-slate-700">Registrar pago inmediatamente</span>
-                    </label>
-                    {isPaid && (
-                        <div>
-                            <label className="block text-xs font-medium text-amber-700 mb-1">Fecha de Pago</label>
-                            <input
-                                type="date"
-                                value={paymentDate}
-                                onChange={e => setPaymentDate(e.target.value)}
-                                className="w-full px-3 py-2 border border-amber-200 rounded-md focus:ring-2 focus:ring-cyan-500 outline-none bg-white text-slate-900"
-                            />
-                        </div>
-                    )}
-                </div>
-
                 <div className="flex justify-end gap-3 mt-8 pt-4 border-t">
                     <button onClick={onClose} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-md hover:bg-slate-300 transition-colors">
                         Cancelar
