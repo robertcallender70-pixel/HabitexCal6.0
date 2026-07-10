@@ -240,7 +240,8 @@ export function calculateSchedule(
                 const pred = initialSchedule[spec.predecessorId];
                 if (pred) {
                     let sDate = new Date(pred.endDate);
-                    sDate.setDate(sDate.getDate() + 1);
+                    const waitingDays = spec.laborItem.scheduleWaitingDays ? Number(spec.laborItem.scheduleWaitingDays) : 0;
+                    sDate.setDate(sDate.getDate() + 1 + waitingDays);
                     sDate = getNextWorkingDate(sDate, excludeSaturdays, excludeSundays);
                     const { endDate: eDate } = calculateEndAndWorkingDays(sDate, spec.durationDays, excludeSaturdays, excludeSundays);
 
@@ -332,7 +333,8 @@ export function calculateSchedule(
                 const pred = remainingSchedule[spec.predecessorId];
                 if (pred) {
                     let sDate = new Date(pred.endDate);
-                    sDate.setDate(sDate.getDate() + 1);
+                    const waitingDays = spec.laborItem.scheduleWaitingDays ? Number(spec.laborItem.scheduleWaitingDays) : 0;
+                    sDate.setDate(sDate.getDate() + 1 + waitingDays);
                     sDate = getNextWorkingDate(sDate, excludeSaturdays, excludeSundays);
                     const { endDate: eDate } = calculateEndAndWorkingDays(sDate, spec.durationDays, excludeSaturdays, excludeSundays);
 

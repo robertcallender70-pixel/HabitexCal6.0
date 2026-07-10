@@ -401,30 +401,57 @@ export const duplicateProject = async (projectId: number): Promise<number | unde
             clientName: '',
             clientAddress: ''
         };
+        if (newProjectData.parentId) {
+            delete newProjectData.parentId;
+        }
         delete newProjectData.id;
         const newProjectId = await projectStore.add(newProjectData);
 
-        const sourceActivities: Activity[] = await activityStore.index('projectId').getAll(projectId);
-        for (const activity of sourceActivities) {
-            const newActivityData = { ...activity, projectId: newProjectId };
-            delete newActivityData.id;
-            delete newActivityData.materialsPurchased;
-            await activityStore.add(newActivityData);
-        }
+        const duplicateProjectData = async (sourceId: number, targetId: number) => {
+            const sourceActivities: Activity[] = await activityStore.index('projectId').getAll(sourceId);
+            for (const activity of sourceActivities) {
+                const newActivityData = { ...activity, projectId: targetId };
+                delete newActivityData.id;
+                delete newActivityData.materialsPurchased;
+                await activityStore.add(newActivityData);
+            }
 
-        const sourceLaborItems: LaborItem[] = await laborStore.index('projectId').getAll(projectId);
-        for (const laborItem of sourceLaborItems) {
-            const newLaborItemData = { ...laborItem, projectId: newProjectId };
-            delete newLaborItemData.id;
-            delete newLaborItemData.quantityCompleted;
-            await laborStore.add(newLaborItemData);
-        }
+            const sourceLaborItems: LaborItem[] = await laborStore.index('projectId').getAll(sourceId);
+            for (const laborItem of sourceLaborItems) {
+                const newLaborItemData = { ...laborItem, projectId: targetId };
+                delete newLaborItemData.id;
+                delete newLaborItemData.quantityCompleted;
+                await laborStore.add(newLaborItemData);
+            }
 
-        const sourceBudgetItems: BudgetItem[] = await budgetStore.index('projectId').getAll(projectId);
-        for (const budgetItem of sourceBudgetItems) {
-            const newBudgetItemData = { ...budgetItem, projectId: newProjectId };
-            delete newBudgetItemData.id;
-            await budgetStore.add(newBudgetItemData);
+            const sourceBudgetItems: BudgetItem[] = await budgetStore.index('projectId').getAll(sourceId);
+            for (const budgetItem of sourceBudgetItems) {
+                const newBudgetItemData = { ...budgetItem, projectId: targetId };
+                delete newBudgetItemData.id;
+                await budgetStore.add(newBudgetItemData);
+            }
+        };
+
+        // Duplicate main project planning data
+        await duplicateProjectData(projectId, newProjectId);
+
+        // Fetch all projects to find child projects (objetos de obra)
+        const allProjects: Project[] = await projectStore.getAll();
+        const children = allProjects.filter(p => p.parentId === projectId);
+
+        for (const child of children) {
+            if (child.id) {
+                const newChildData = {
+                    ...child,
+                    parentId: newProjectId, // Link to the newly duplicated parent project
+                    createdAt: new Date(),
+                    clientName: '',
+                    clientAddress: ''
+                };
+                delete newChildData.id;
+                const newChildId = await projectStore.add(newChildData);
+                await duplicateProjectData(child.id, newChildId);
+            }
         }
 
         await tx.done;

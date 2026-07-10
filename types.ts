@@ -71,6 +71,7 @@ export interface LaborItem {
     scheduleProductivity?: number;
     schedulePredecessorId?: number;
     scheduleStartDate?: string; // Optional custom start date for root activities (YYYY-MM-DD)
+    scheduleWaitingDays?: number; // Tiempo de espera/curado en días (lag)
 }
 
 export interface BudgetItem {

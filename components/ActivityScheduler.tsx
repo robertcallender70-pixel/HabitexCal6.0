@@ -189,7 +189,8 @@ export default function ActivityScheduler({
         workers: number, 
         productivity: number, 
         predecessorId: number | undefined,
-        startDate?: string
+        startDate?: string,
+        waitingDays?: number
     ) => {
         const originalItem = laborItems.find(a => a.id === itemId);
         if (!originalItem) return;
@@ -199,7 +200,8 @@ export default function ActivityScheduler({
             scheduleWorkers: workers,
             scheduleProductivity: productivity,
             schedulePredecessorId: predecessorId,
-            scheduleStartDate: startDate
+            scheduleStartDate: startDate,
+            scheduleWaitingDays: waitingDays !== undefined ? waitingDays : originalItem.scheduleWaitingDays
         };
         await onUpdateLaborItem(updatedItem);
     };
@@ -1083,30 +1085,58 @@ export default function ActivityScheduler({
 
                                         <td className="p-4">
                                             {isEditing ? (
-                                                <select
-                                                    value={item.predecessorId || ""}
-                                                    onChange={(e) => {
-                                                        const val = e.target.value ? Number(e.target.value) : undefined;
-                                                        const sDate = val ? undefined : item.laborItem.scheduleStartDate;
-                                                        handleUpdateLaborItemSchedule(item.id, item.workers, item.productivity, val, sDate);
-                                                    }}
-                                                    className="bg-white border rounded-lg px-2.5 py-1 text-xs font-semibold w-full focus:ring-1 focus:ring-cyan-500 max-w-[200px]"
-                                                >
-                                                    <option value="">Ninguna (Paralela)</option>
-                                                    {laborItems
-                                                        .filter(a => a.id !== item.id) // avoid self-predecessor
-                                                        .map(a => (
-                                                            <option key={a.id} value={a.id}>{a.name}</option>
-                                                        ))
-                                                    }
-                                                </select>
+                                                <div className="space-y-1.5">
+                                                    <select
+                                                        value={item.predecessorId || ""}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value ? Number(e.target.value) : undefined;
+                                                            const sDate = val ? undefined : item.laborItem.scheduleStartDate;
+                                                            const wDays = val ? item.laborItem.scheduleWaitingDays : undefined;
+                                                            handleUpdateLaborItemSchedule(item.id, item.workers, item.productivity, val, sDate, wDays);
+                                                        }}
+                                                        className="bg-white border rounded-lg px-2.5 py-1 text-xs font-semibold w-full focus:ring-1 focus:ring-cyan-500 max-w-[200px]"
+                                                    >
+                                                        <option value="">Ninguna (Paralela)</option>
+                                                        {laborItems
+                                                            .filter(a => a.id !== item.id) // avoid self-predecessor
+                                                            .map(a => (
+                                                                <option key={a.id} value={a.id}>{a.name}</option>
+                                                            ))
+                                                        }
+                                                    </select>
+                                                    
+                                                    {item.predecessorId && (
+                                                        <div className="flex items-center gap-1.5 mt-1.5 bg-slate-50 p-1 px-1.5 rounded-lg border border-slate-150 max-w-[200px]">
+                                                            <span className="text-[10px] text-slate-500 font-bold whitespace-nowrap">Espera (días):</span>
+                                                            <ManagedNumberInput
+                                                                type="number"
+                                                                value={item.laborItem.scheduleWaitingDays || 0}
+                                                                onCommit={(v) => {
+                                                                    const val = parseInt(v) || 0;
+                                                                    handleUpdateLaborItemSchedule(item.id, item.workers, item.productivity, item.predecessorId, item.laborItem.scheduleStartDate, val);
+                                                                }}
+                                                                className="w-14 px-1.5 py-0.5 border rounded-md text-xs font-bold text-slate-900 text-center bg-white"
+                                                                min="0"
+                                                                step="1"
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
                                             ) : (
-                                                <div>
+                                                <div className="space-y-1">
                                                     {item.predecessorId ? (
-                                                        <span className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full text-xs font-bold border border-blue-100">
-                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" /></svg>
-                                                            {laborItems.find(a => a.id === item.predecessorId)?.name || 'Actividad previa'}
-                                                        </span>
+                                                        <>
+                                                            <span className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full text-xs font-bold border border-blue-100">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" /></svg>
+                                                                {laborItems.find(a => a.id === item.predecessorId)?.name || 'Actividad previa'}
+                                                            </span>
+                                                            {item.laborItem.scheduleWaitingDays ? (
+                                                                <div className="flex items-center gap-1 text-[10px] font-extrabold text-amber-600 bg-amber-50 border border-amber-100 rounded-md px-1.5 py-0.5 w-max max-w-full">
+                                                                    <span className="shrink-0">⌛</span>
+                                                                    <span className="truncate">+{item.laborItem.scheduleWaitingDays} d. espera / curado</span>
+                                                                </div>
+                                                            ) : null}
+                                                        </>
                                                     ) : (
                                                         <span className="text-slate-400 font-normal italic text-xs">Sin predecesora (Inicia en paralelo)</span>
                                                     )}

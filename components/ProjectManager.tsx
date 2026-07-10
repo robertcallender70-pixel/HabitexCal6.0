@@ -2405,6 +2405,9 @@ export const ProjectManager: React.FC = () => {
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-1">
+                                                    <button onClick={() => { if (isPro) { setProjectToDuplicate(child); setIsDuplicateModalOpen(true); } else { setIsLicenseModalOpen(true); } }} className={`p-2 text-slate-500 ${isPro ? 'hover:text-purple-600' : 'opacity-50'}`} title={proFeatureTooltip}>
+                                                        <DocumentDuplicateIcon className="h-5 w-5"/>
+                                                    </button>
                                                     <button onClick={() => handleAssignParent(child, null)} className="p-2 text-slate-500 hover:text-red-600" title="Hacer Independiente">
                                                         <UnlinkIcon className="h-5 w-5" />
                                                     </button>
